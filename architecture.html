@@ -1,0 +1,561 @@
+<title>Test Case Generator — Architecture</title>
+<style>
+  :root {
+    --paper: #f1f3f2;
+    --paper-raised: #ffffff;
+    --ink: #131c22;
+    --ink-soft: #2c3a40;
+    --muted: #57666c;
+    --line: #cdd6d5;
+    --line-soft: #dde4e3;
+    --accent: #0e7c86;
+    --accent-ink: #075158;
+    --accent-soft: #dcecec;
+    --amber: #a5620c;
+    --amber-soft: #f3e3ce;
+    --code-bg: #e7edec;
+    --shadow: 0 1px 2px rgba(19, 28, 34, 0.06), 0 6px 20px rgba(19, 28, 34, 0.05);
+    --radius: 3px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0c1315;
+      --paper-raised: #121b1e;
+      --ink: #e7edec;
+      --ink-soft: #c3cdcc;
+      --muted: #8ea2a6;
+      --line: #263336;
+      --line-soft: #1d282b;
+      --accent: #4fd6db;
+      --accent-ink: #bdf3f5;
+      --accent-soft: #123336;
+      --amber: #e0973f;
+      --amber-soft: #2e2413;
+      --code-bg: #16201f;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0c1315;
+    --paper-raised: #121b1e;
+    --ink: #e7edec;
+    --ink-soft: #c3cdcc;
+    --muted: #8ea2a6;
+    --line: #263336;
+    --line-soft: #1d282b;
+    --accent: #4fd6db;
+    --accent-ink: #bdf3f5;
+    --accent-soft: #123336;
+    --amber: #e0973f;
+    --amber-soft: #2e2413;
+    --code-bg: #16201f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+  :root[data-theme="light"] {
+    --paper: #f1f3f2;
+    --paper-raised: #ffffff;
+    --ink: #131c22;
+    --ink-soft: #2c3a40;
+    --muted: #57666c;
+    --line: #cdd6d5;
+    --line-soft: #dde4e3;
+    --accent: #0e7c86;
+    --accent-ink: #075158;
+    --accent-soft: #dcecec;
+    --amber: #a5620c;
+    --amber-soft: #f3e3ce;
+    --code-bg: #e7edec;
+    --shadow: 0 1px 2px rgba(19, 28, 34, 0.06), 0 6px 20px rgba(19, 28, 34, 0.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  }
+
+  code, .path, .fn, kbd {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius);
+    padding: 0.05em 0.4em;
+    color: var(--ink-soft);
+  }
+
+  a { color: var(--accent-ink); text-decoration-color: var(--line); text-underline-offset: 2px; }
+  a:hover { text-decoration-color: currentColor; }
+
+  h1, h2, h3 {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px 96px;
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 56px;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 40px 0 28px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  .masthead-eyebrow {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent-ink);
+    margin: 0 0 10px;
+  }
+  .masthead h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+  }
+  .masthead p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 16px;
+    max-width: 56ch;
+  }
+  .masthead-meta {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: right;
+    line-height: 1.7;
+    white-space: nowrap;
+  }
+
+  /* ---------- Index rail ---------- */
+  nav.rail {
+    position: sticky;
+    top: 32px;
+    align-self: start;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+  }
+  nav.rail .rail-label {
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  nav.rail ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: sec;
+    border-left: 1px solid var(--line);
+  }
+  nav.rail li { counter-increment: sec; }
+  nav.rail a {
+    display: block;
+    padding: 6px 0 6px 14px;
+    margin-left: -1px;
+    border-left: 1px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+  }
+  nav.rail a::before {
+    content: counter(sec, decimal-leading-zero) "  ";
+    color: var(--line);
+  }
+  nav.rail a:hover { color: var(--ink); border-left-color: var(--accent); }
+
+  /* ---------- Main column ---------- */
+  main { min-width: 0; padding-top: 40px; }
+
+  section { margin-bottom: 64px; scroll-margin-top: 28px; }
+  section h2 {
+    font-size: 19px;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  section h2 .num {
+    color: var(--accent-ink);
+    font-size: 13px;
+  }
+  section > .dek {
+    margin: 0 0 22px;
+    color: var(--muted);
+    font-size: 15px;
+    max-width: 64ch;
+  }
+  section p { max-width: 66ch; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  .chip {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--ink-soft);
+    background: var(--paper-raised);
+  }
+
+  /* ---------- Diagram card ---------- */
+  .diagram {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .diagram-cap {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin: 8px 2px 0;
+  }
+
+  /* ---------- Tables ---------- */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper-raised); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  thead th {
+    text-align: left;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+    color: var(--ink-soft);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--accent-soft); }
+  td.lines, th.lines { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); font-family: ui-monospace, monospace; font-size: 13px; }
+  td.file { white-space: nowrap; }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    display: flex;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--amber);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    background: var(--amber-soft);
+    font-size: 14.5px;
+    max-width: 72ch;
+  }
+  .callout strong { color: var(--ink); }
+  .callout .mark { font-family: ui-monospace, monospace; font-size: 12px; color: var(--amber); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 6px; }
+
+  /* ---------- Flow blocks ---------- */
+  .flow { margin-bottom: 40px; }
+  .flow h3 {
+    font-size: 15px;
+    margin: 0 0 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .flow h3 .tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    letter-spacing: 0.04em;
+  }
+
+  /* ---------- Footer ---------- */
+  footer {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    margin-top: 12px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    nav.rail { position: static; border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+    .masthead-meta { text-align: left; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    section { animation: rise 0.4s ease both; }
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px);} to { opacity: 1; transform: none; } }
+</style>
+
+<div class="shell">
+
+  <div class="masthead">
+    <div>
+      <p class="masthead-eyebrow">Architecture reference</p>
+      <h1>Test Case Generator</h1>
+      <p>A vanilla-JS chat UI that turns user stories, PRDs, or Jira tickets into structured test cases via a Langflow AI flow, with a small Express server acting only as a static host and a credential-safe Jira proxy.</p>
+    </div>
+    <div class="masthead-meta">
+      repo · CustomChatUI<br>
+      stack · node ≥18 · express 4 · zero build step<br>
+      generated · 2026-07-18
+    </div>
+  </div>
+
+  <nav class="rail">
+    <div class="rail-label">Contents</div>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#system">System map</a></li>
+      <li><a href="#files">File map</a></li>
+      <li><a href="#frontend">Inside app.js</a></li>
+      <li><a href="#flows">Request flows</a></li>
+      <li><a href="#history">History &amp; storage</a></li>
+      <li><a href="#config">Config &amp; secrets</a></li>
+      <li><a href="#spec">Spec of record</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="overview">
+      <h2><span class="num">01</span> Overview</h2>
+      <p class="dek">Three moving parts, one process.</p>
+      <p>The whole app is a single Node process (<code>server.js</code>) that does two unrelated jobs: it serves the static frontend in <code>public/</code>, and it proxies one endpoint to Jira Cloud so the browser never sees a Jira API token. Everything else — chat state, Markdown rendering, file upload, Excel export, conversation history — lives in one frontend script, <code>public/app.js</code>, with no framework and no bundler. The actual test-case generation happens outside this codebase entirely, in a Langflow flow the frontend calls directly over REST.</p>
+      <div class="chips">
+        <span class="chip">public/index.html — shell</span>
+        <span class="chip">public/app.js — 2,495 lines, all behavior</span>
+        <span class="chip">public/styles.css — 1,675 lines</span>
+        <span class="chip">server.js — 121 lines</span>
+        <span class="chip">package.json — express + dotenv only</span>
+      </div>
+    </section>
+
+    <section id="system">
+      <h2><span class="num">02</span> System map</h2>
+      <p class="dek">Who talks to whom, and over what.</p>
+      <div class="diagram">
+<pre class="mermaid">
+graph LR
+  subgraph Browser["Browser — public/"]
+    HTML["index.html"]
+    APP["app.js"]
+    CSS["styles.css"]
+    CFG["config.js\n(gitignored)"]
+  end
+
+  subgraph NODE["Node process — server.js :8000"]
+    EXP["Express static host"]
+    PROXY["GET /api/jira/:ticketId"]
+  end
+
+  LF[("Langflow server\n:7860 (separate process)")]
+  JIRA[("Jira Cloud\nREST API v3")]
+
+  EXP -- "serves" --> HTML
+  HTML --> APP
+  APP -. "reads BASE_URL, FLOW_ID, API_KEY" .-> CFG
+  APP == "run / files / monitor REST calls\nx-api-key header" ==> LF
+  APP -- "GET /api/jira/:id\n(same origin, no key)" --> PROXY
+  PROXY == "Basic auth email:token" ==> JIRA
+</pre>
+      </div>
+      <p class="diagram-cap">Bold edges cross a process boundary the browser can reach directly. The Jira token only ever appears on the dotted-free path server.js → Jira.</p>
+    </section>
+
+    <section id="files">
+      <h2><span class="num">03</span> File map</h2>
+      <p class="dek">What each file in the repo is actually for.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>File</th><th class="lines">Lines</th><th>Role</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="file"><span class="path">server.js</span></td><td class="lines">121</td><td>Express app. Serves <code>public/</code> statically and exposes <code>GET /api/jira/:ticketId</code>, the only backend endpoint. Converts Jira's Atlassian Document Format (rich-text) fields to plain text before returning JSON.</td></tr>
+            <tr><td class="file"><span class="path">public/index.html</span></td><td class="lines">~330</td><td>Static DOM skeleton only — header/toolbar, sidebar, chat panel, composer, Jira panel markup. No inline logic; all behavior wired up by <code>app.js</code> on load.</td></tr>
+            <tr><td class="file"><span class="path">public/app.js</span></td><td class="lines">2,495</td><td>Everything: Langflow API calls, Markdown/table rendering, message bubbles, file attach + drag-drop, Jira connector, model selector, theme, Excel/CSV export, conversation sidebar. See §4.</td></tr>
+            <tr><td class="file"><span class="path">public/styles.css</span></td><td class="lines">1,675</td><td>All presentation. CSS custom properties drive light/dark theme; sectioned by component (composer, Jira panel, sidebar, toast, etc).</td></tr>
+            <tr><td class="file"><span class="path">public/config.js</span></td><td class="lines">13</td><td>Frontend connection config — <em>ships to the browser</em>. Gitignored; copied from <span class="path">config.example.js</span>.</td></tr>
+            <tr><td class="file"><span class="path">.env</span></td><td class="lines">5</td><td>Backend-only secrets for the Jira proxy. Gitignored; copied from <span class="path">.env.example</span>. Never sent to the browser.</td></tr>
+            <tr><td class="file"><span class="path">package.json</span></td><td class="lines">17</td><td>Two runtime deps: <code>express</code>, <code>dotenv</code>. <code>npm start</code> → <code>node server.js</code>. No build step, no bundler, no test runner.</td></tr>
+            <tr><td class="file"><span class="path">CustomChat.md</span></td><td class="lines">221</td><td>The original build prompt this app was generated from — see §8.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="frontend">
+      <h2><span class="num">04</span> Inside app.js</h2>
+      <p class="dek">One file, twelve concerns. It's a single IIFE with no imports — grouped here by what each cluster of functions does, not by its literal top-to-bottom order.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Concern</th><th class="lines">Lines</th><th>Representative functions</th><th>Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Session registry</td><td class="lines">68–163</td><td class="fn">loadSessionRegistry, touchSession, groupSessionsByRecency</td><td>Tracks conversations in <code>localStorage</code>; buckets them into Today / Yesterday / Previous 7 days / 30 days for the sidebar.</td></tr>
+            <tr><td>Langflow API layer</td><td class="lines">164–398</td><td class="fn">callLangflowRun, buildRunPayload, runFileGeneration, resolveComponentId</td><td>Every REST call to Langflow; auto-discovers component IDs from the flow definition when not pinned in config; normalizes errors (network vs HTTP).</td></tr>
+            <tr><td>Markdown renderer</td><td class="lines">414–550</td><td class="fn">renderMarkdown, renderTable, renderInline</td><td>Hand-rolled parser — tables, bold/italic, headers, code — no external Markdown library.</td></tr>
+            <tr><td>Message bubbles</td><td class="lines">550–1240</td><td class="fn">appendAssistantMessage, extractTestCasePhases, renderTestCasePhases</td><td>Builds chat DOM; splits a response into per-phase test-case groups; wires retry/edit/like/dislike affordances per bubble.</td></tr>
+            <tr><td>Composer &amp; attachments</td><td class="lines">1241–1474</td><td class="fn">sendUserStory, sendFileStory, renderFileChip</td><td>Text-send and file-send paths; paperclip + drag-and-drop; autosizing textarea.</td></tr>
+            <tr><td>Jira connector</td><td class="lines">1313–1454</td><td class="fn">fetchJiraTicket, sendJiraStory, runJiraStorySend</td><td>Fetch/Imported panel state machine; calls the local <code>/api/jira</code> proxy; composes the <code>jira_story</code> text block for generation.</td></tr>
+            <tr><td>Empty state &amp; model selector</td><td class="lines">1566–1792</td><td class="fn">renderEmptyState, initModelSelector, setCurrentModel</td><td>Sample-story cards (Banking / Insurance / Finance); per-run model override sourced from <code>MODEL_TWEAKS</code>.</td></tr>
+            <tr><td>Theme</td><td class="lines">1792–1821</td><td class="fn">applyTheme, toggleTheme</td><td>Dark/light via a <code>data-theme</code> attribute; persisted in <code>localStorage</code>, defaults to <code>prefers-color-scheme</code>.</td></tr>
+            <tr><td>Export</td><td class="lines">1821–2084</td><td class="fn">extractTableRows, mapRowsToColumns, exportRowsToExcel</td><td>Parses the last assistant Markdown table; maps columns by header name (order-independent); writes <code>.xlsx</code> / <code>.csv</code>.</td></tr>
+            <tr><td>Toast &amp; status bar</td><td class="lines">2084–2127</td><td class="fn">showToast, updateStatusBar</td><td>Transient notifications; footer shows target URL, model override, last response time.</td></tr>
+            <tr><td>Local persistence &amp; sidebar</td><td class="lines">2127–2482</td><td class="fn">renderSidebar, fetchSessionMessages, deleteSessionFromMonitor</td><td>Renders the history list; on click, re-hydrates a conversation from Langflow's monitor API.</td></tr>
+            <tr><td>Bootstrap</td><td class="lines">2482–2495</td><td class="fn">init()</td><td>Wires every module above to DOM events on load.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="flows">
+      <h2><span class="num">05</span> Request flows</h2>
+      <p class="dek">The app has exactly three ways to start a generation. All three converge on the same Langflow run call and the same rendering path.</p>
+
+      <div class="flow">
+        <h3>Text mode <span class="tag">default</span></h3>
+        <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant UI as app.js
+  participant LF as Langflow
+
+  U->>UI: type story, press Send
+  UI->>UI: buildRunPayload(text)
+  UI->>LF: POST /api/v1/run/{FLOW_ID}\nx-api-key · session_id
+  LF-->>UI: outputs[0].outputs[0].results.message.text
+  UI->>UI: extractMessageText → renderMarkdown
+  UI-->>U: assistant bubble with test-case table
+</pre>
+        </div>
+      </div>
+
+      <div class="flow">
+        <h3>File mode <span class="tag">PDF / PRD</span></h3>
+        <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant UI as app.js
+  participant LF as Langflow
+
+  U->>UI: attach PDF (paperclip or drop)
+  UI->>LF: POST /api/v2/files (multipart)
+  alt v2 upload returns 404 — older Langflow
+    UI->>LF: POST /api/v1/files/upload/{FLOW_ID}
+  end
+  LF-->>UI: uploaded file path
+  UI->>LF: POST /api/v1/run/{FLOW_ID}\ntweaks[FILE_COMPONENT_ID].path
+  LF-->>UI: message.text
+  UI-->>U: rendered response
+</pre>
+        </div>
+      </div>
+
+      <div class="flow">
+        <h3>Jira mode <span class="tag">imported ticket</span></h3>
+        <div class="diagram">
+<pre class="mermaid">
+sequenceDiagram
+  participant U as User
+  participant UI as app.js
+  participant SRV as server.js
+  participant J as Jira Cloud
+  participant LF as Langflow
+
+  U->>UI: enter ticket ID, Fetch
+  UI->>SRV: GET /api/jira/:ticketId
+  SRV->>J: GET /rest/api/3/issue/:id (Basic auth)
+  J-->>SRV: summary, description (ADF), AC field
+  SRV->>SRV: adfToText / fieldToText normalize
+  SRV-->>UI: { id, summary, description, acceptanceCriteria }
+  UI-->>U: editable "Imported" view
+  U->>UI: edit fields, Generate Test Cases
+  UI->>LF: POST /api/v1/run/{FLOW_ID}\ntweaks[PREFETCHED_STORY_COMPONENT_ID]
+  LF-->>UI: message.text
+  UI-->>U: rendered response
+</pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="history">
+      <h2><span class="num">06</span> History &amp; storage</h2>
+      <p class="dek">No database. State lives in the browser and in Langflow.</p>
+      <p>The sidebar list is a thin index kept in <code>localStorage</code> under the key <code>tcgen_sessions</code> — an array of <code>{ id, title, createdAt, lastUsedAt }</code>, titled from the first user message or attached filename. Opening a past conversation doesn't replay from that index; it re-fetches the real transcript from Langflow's own message store via <code>GET /api/v1/monitor/messages?flow_id=…&amp;session_id=…</code>, so the index is a pointer, not the record of truth. Deleting a conversation calls the same monitor API before dropping the local entry. Theme and the active model override are separate small <code>localStorage</code> keys.</p>
+    </section>
+
+    <section id="config">
+      <h2><span class="num">07</span> Config &amp; secrets</h2>
+      <p class="dek">Two config files, two trust levels.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>File</th><th>Visibility</th><th>Keys</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="file"><span class="path">public/config.js</span></td><td>Ships to the browser</td><td class="mono">BASE_URL · FLOW_ID · API_KEY · MODEL_TWEAKS · FILE_COMPONENT_ID · PREFETCHED_STORY_COMPONENT_ID</td></tr>
+            <tr><td class="file"><span class="path">.env</span></td><td>Server-only</td><td class="mono">PORT · JIRA_BASE_URL · JIRA_EMAIL · JIRA_API_TOKEN · JIRA_AC_FIELD_ID</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout" style="margin-top:18px;">
+        <div><span class="mark">Asymmetry</span><strong>The Langflow API key is client-side by design</strong> — <code>app.js</code> calls Langflow directly, so <code>API_KEY</code> is readable in the browser. The Jira API token never takes that path: it lives only in <code>.env</code> on the server, which is the entire reason <code>server.js</code>'s Jira proxy exists.</div>
+      </div>
+    </section>
+
+    <section id="spec">
+      <h2><span class="num">08</span> Spec of record</h2>
+      <p class="dek">This isn't reverse-engineered — the spec is checked in.</p>
+      <p><span class="path">CustomChat.md</span> is the original build prompt the app was generated from: persona, hard constraints (no Langflow embedded-chat widget, config isolated from code), the exact API contract for text/file/Jira runs, and the UI requirements for every feature in the README's feature table. When behavior here looks deliberate rather than incidental — the two-step file upload with a legacy fallback, column-name-based Excel mapping, the auto-discovery fallback for component IDs — that's why: it was specified, not guessed.</p>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Test Case Generator — architecture reference</span>
+    <span>source: server.js · public/app.js · public/styles.css · public/index.html · CustomChat.md</span>
+  </footer>
+
+</div>
