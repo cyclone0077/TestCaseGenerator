@@ -39,6 +39,27 @@
     jiraDescription: document.getElementById("jira-description"),
     jiraAcceptance: document.getElementById("jira-acceptance"),
     jiraGenerateBtn: document.getElementById("jira-generate-btn"),
+    knowledgeBtn: document.getElementById("knowledge-btn"),
+    knowledgePanel: document.getElementById("knowledge-panel"),
+    knowledgeCloseBtn: document.getElementById("knowledge-close-btn"),
+    knowledgeSourceSelect: document.getElementById("knowledge-source-select"),
+    knowledgeQueryInput: document.getElementById("knowledge-query-input"),
+    knowledgeSearchBtn: document.getElementById("knowledge-search-btn"),
+    ingestionBtn: document.getElementById("ingestion-btn"),
+    ingestionView: document.getElementById("ingestion-view"),
+    ingestionCloseBtn: document.getElementById("ingestion-close-btn"),
+    ingestionCancelBtn: document.getElementById("ingestion-cancel-btn"),
+    ingestionModeSelect: document.getElementById("ingestion-mode-select"),
+    ingestionPageIdInput: document.getElementById("ingestion-page-id-input"),
+    ingestionSourceNameInput: document.getElementById("ingestion-source-name-input"),
+    ingestionFetchBtn: document.getElementById("ingestion-fetch-btn"),
+    ingestionFetchResult: document.getElementById("ingestion-fetch-result"),
+    ingestionRefreshFilesBtn: document.getElementById("ingestion-refresh-files-btn"),
+    ingestionFileList: document.getElementById("ingestion-file-list"),
+    ingestionCollectionInput: document.getElementById("ingestion-collection-input"),
+    ingestionIndexInput: document.getElementById("ingestion-index-input"),
+    ingestionEmbedBtn: document.getElementById("ingestion-embed-btn"),
+    ingestionEmbedResult: document.getElementById("ingestion-embed-result"),
   };
 
   // ---- Session state -------------------------------------------------------
@@ -49,6 +70,15 @@
     abortController: null,
     jiraTicket: null,
     typingTextTimer: null,
+    // Knowledge Search conversational memory - deliberately separate from
+    // sessionId above (that one's for the Langflow-based modes). Set fresh
+    // each time the panel's Search button is used; reused by composer
+    // follow-ups for as long as the last message was a Knowledge Search answer.
+    knowledgeSessionId: null,
+    knowledgeSource: null,
+    // Ingestion panel: which src/data/*.json file Step 3 will embed. Set by
+    // clicking a row in the Step 2 file list.
+    ingestionSelectedFile: null,
   };
 
   // Single constant so renaming the assistant later is a one-line change.
@@ -1240,12 +1270,15 @@
 
   // ---- Send flow -------------------------------------------------------
 
+  // Keep in sync with .chat-input's max-height in styles.css.
+  const CHAT_INPUT_MAX_HEIGHT = 200;
+
   function autoResizeInput() {
     const el = elements.chatInput;
     el.style.height = "auto";
-    const newHeight = Math.min(el.scrollHeight, 160);
+    const newHeight = Math.min(el.scrollHeight, CHAT_INPUT_MAX_HEIGHT);
     el.style.height = newHeight + "px";
-    el.style.overflowY = el.scrollHeight > 160 ? "auto" : "hidden";
+    el.style.overflowY = el.scrollHeight > CHAT_INPUT_MAX_HEIGHT ? "auto" : "hidden";
   }
 
   async function sendUserStory(text) {
@@ -1419,8 +1452,329 @@
     }
   }
 
+  // ==========================================================================
+  // Section: Knowledge Search (4th input)
+  // Independent of Langflow - queries the app's own /api/knowledge/query
+  // route, which embeds the question, runs a vector search over the
+  // selected source's MongoDB collection, and returns an LLM-synthesized
+  // answer grounded only in the retrieved excerpts.
+  // ==========================================================================
+
+  // Restores whichever composer placeholder is correct for the current chat
+  // state (empty vs. already has messages) - used when leaving a mode that
+  // temporarily overrides the placeholder (e.g. Knowledge Search).
+  function restoreDefaultPlaceholder() {
+    elements.chatInput.placeholder = elements.chatPanel.classList.contains("is-empty")
+      ? "I’m " + ASSISTANT_NAME + " — type your user story here"
+      : "Ask a follow-up, or paste the next user story...";
+  }
+
+  function showKnowledgePanel() {
+    elements.knowledgePanel.hidden = false;
+    elements.knowledgeBtn.classList.add("jira-active");
+    // Decluttering: only one of Knowledge/Ingestion needs to be reachable at
+    // a time - hide the other's toolbar button rather than show both.
+    elements.ingestionBtn.hidden = true;
+    elements.chatInput.placeholder = "Ask anything about your ingested data...";
+    elements.knowledgeQueryInput.focus();
+  }
+
+  function hideKnowledgePanel() {
+    elements.knowledgePanel.hidden = true;
+    elements.knowledgeBtn.classList.remove("jira-active");
+    elements.ingestionBtn.hidden = false;
+    restoreDefaultPlaceholder();
+  }
+
+  function knowledgeNetworkError() {
+    const err = new Error(
+      "Could not reach the knowledge search endpoint. Check that server.js is running."
+    );
+    err.isNetworkError = true;
+    return err;
+  }
+
+  // Renders the answer + source citations as one assistant markdown message,
+  // reusing the existing markdown renderer (so links render as clickable).
+  function formatKnowledgeReply(result) {
+    let text = result.answer;
+    if (result.sources && result.sources.length) {
+      // Confluence-backed sources (Test Plan) carry a url -> link. DB-backed
+      // sources (Test Cases) don't have one -> plain "ID — Title" citation.
+      text += "\n\n**Sources:**\n" + result.sources.map(function (s) {
+        return s.url
+          ? "- [" + s.title + "](" + s.url + ")"
+          : "- **" + s.id + "** — " + s.title;
+      }).join("\n");
+    }
+    return text;
+  }
+
+  // Shared by both entry points below - a fresh panel search and a composer
+  // follow-up differ only in the session id used and how the user-facing
+  // chat bubble is labeled, not in how the request/response is handled.
+  async function sendKnowledgeQuery(source, sessionId, query, displayUserMsg) {
+    appendUserMessage(displayUserMsg);
+    saveLocalMessage(state.sessionId, "user", displayUserMsg);
+    recordSessionMessage(query);
+    state.lastRequest = function () { sendKnowledgeQuery(source, sessionId, query, displayUserMsg); };
+    showTypingIndicator();
+    elements.sendBtn.disabled = true;
+    const t0 = Date.now();
+
+    try {
+      let res;
+      try {
+        res = await fetch("/api/knowledge/query", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source: source, query: query, sessionId: sessionId }),
+        });
+      } catch (e) {
+        throw knowledgeNetworkError();
+      }
+      if (!res.ok) throw await httpError("Knowledge search failed", res);
+
+      const result = await res.json();
+      hideTypingIndicator();
+      const replyText = formatKnowledgeReply(result);
+      saveLocalMessage(state.sessionId, "assistant", replyText);
+      const el = appendAssistantMessage(replyText);
+      // Tag so the composer's submit handler can recognize a follow-up typed
+      // directly in the main chat, without reopening the Knowledge panel.
+      el.dataset.knowledgeSource = source;
+      updateStatusBar(Date.now() - t0);
+    } catch (err) {
+      hideTypingIndicator();
+      appendErrorMessage(err, state.lastRequest);
+    } finally {
+      elements.sendBtn.disabled = false;
+    }
+  }
+
+  async function runKnowledgeSearch() {
+    const source = elements.knowledgeSourceSelect.value;
+    const query = elements.knowledgeQueryInput.value.trim();
+    if (!query) { elements.knowledgeQueryInput.focus(); return; }
+
+    hideKnowledgePanel();
+    // Fresh session every time the panel's Search is explicitly used - this
+    // is a deliberate new topic, not a continuation of any prior thread.
+    state.knowledgeSessionId = crypto.randomUUID();
+    state.knowledgeSource = source;
+
+    const userMsg = "Search " + elements.knowledgeSourceSelect.selectedOptions[0].textContent + ": " + query;
+    await sendKnowledgeQuery(source, state.knowledgeSessionId, query, userMsg);
+  }
+
+  // Follow-up typed directly in the main composer (not the panel) - reuses
+  // the session + source remembered from whichever panel search started
+  // this thread, so no dropdown re-selection is needed.
+  async function runKnowledgeFollowUp(query) {
+    await sendKnowledgeQuery(state.knowledgeSource, state.knowledgeSessionId, query, query);
+  }
+
+  // ==========================================================================
+  // Section: Ingestion admin panel (fetch -> chunk -> embed, in-app instead
+  // of running the CLI scripts by hand). Independent of the chat entirely -
+  // results render inline in the panel, not as chat messages.
+  // ==========================================================================
+
+  // Sidebar step indicator - a progress readout, not a gate: every field
+  // stays reachable throughout (nothing is hidden behind "Next"), this just
+  // reflects how far along the current run actually is.
+  const INGESTION_STEPS = ["source", "configuration", "ingestion", "review"];
+
+  function setIngestionStep(activeIndex) {
+    INGESTION_STEPS.forEach(function (key, i) {
+      const li = document.getElementById("ingestion-step-" + key);
+      li.classList.toggle("active", i === activeIndex);
+      li.classList.toggle("done", i < activeIndex);
+    });
+  }
+
+  function showIngestionPanel() {
+    document.body.classList.add("ingestion-mode");
+    setIngestionStep(0);
+    elements.ingestionPageIdInput.focus();
+    loadIngestionFiles();
+  }
+
+  function hideIngestionPanel() {
+    document.body.classList.remove("ingestion-mode");
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function ingestionNetworkError() {
+    const err = new Error("Could not reach the ingestion endpoint. Check that server.js is running.");
+    err.isNetworkError = true;
+    return err;
+  }
+
+  function selectIngestionFile(fileName) {
+    state.ingestionSelectedFile = fileName;
+    elements.ingestionEmbedBtn.disabled = false;
+    Array.prototype.forEach.call(
+      elements.ingestionFileList.querySelectorAll(".ingestion-file-row"),
+      function (row) { row.classList.toggle("selected", row.dataset.fileName === fileName); }
+    );
+  }
+
+  async function loadIngestionFiles() {
+    elements.ingestionFileList.innerHTML = '<p class="jira-hint">Loading…</p>';
+    try {
+      let res;
+      try {
+        res = await fetch("/api/admin/ingest/files");
+      } catch (e) {
+        throw ingestionNetworkError();
+      }
+      if (!res.ok) throw await httpError("Listing files failed", res);
+      const { files } = await res.json();
+
+      if (!files.length) {
+        elements.ingestionFileList.innerHTML = '<p class="jira-hint">No files yet — run Step 1 first.</p>';
+        return;
+      }
+
+      elements.ingestionFileList.innerHTML = "";
+      files.forEach(function (file) {
+        const row = document.createElement("div");
+        row.className = "ingestion-file-row";
+        row.dataset.fileName = file.fileName;
+        if (file.fileName === state.ingestionSelectedFile) row.classList.add("selected");
+
+        const name = document.createElement("span");
+        name.className = "ingestion-file-name";
+        name.textContent = file.fileName;
+
+        const meta = document.createElement("span");
+        meta.className = "ingestion-file-meta";
+        meta.textContent = formatFileSize(file.sizeBytes) + " · " + new Date(file.mtime).toLocaleString();
+
+        row.appendChild(name);
+        row.appendChild(meta);
+        row.addEventListener("click", function () { selectIngestionFile(file.fileName); });
+        elements.ingestionFileList.appendChild(row);
+      });
+
+      // Keep the current selection highlighted if it's still in the list;
+      // otherwise nothing is selected until the user picks a row.
+      if (state.ingestionSelectedFile && files.some((f) => f.fileName === state.ingestionSelectedFile)) {
+        selectIngestionFile(state.ingestionSelectedFile);
+      }
+    } catch (err) {
+      elements.ingestionFileList.innerHTML = "";
+      showToast(err.message, true);
+    }
+  }
+
+  async function runIngestionFetch() {
+    const pageId = elements.ingestionPageIdInput.value.trim();
+    const sourceName = elements.ingestionSourceNameInput.value.trim();
+    if (!pageId) { elements.ingestionPageIdInput.focus(); return; }
+    if (!sourceName) { elements.ingestionSourceNameInput.focus(); return; }
+
+    elements.ingestionFetchBtn.disabled = true;
+    elements.ingestionFetchResult.hidden = true;
+    try {
+      let res;
+      try {
+        res = await fetch("/api/admin/ingest/fetch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pageId: pageId, mode: elements.ingestionModeSelect.value, sourceName: sourceName }),
+        });
+      } catch (e) {
+        throw ingestionNetworkError();
+      }
+      if (!res.ok) throw await httpError("Fetch & Chunk failed", res);
+
+      const result = await res.json();
+      elements.ingestionFetchResult.hidden = false;
+      elements.ingestionFetchResult.textContent =
+        "✅ Fetched " + result.pageCount + " page(s), produced " + result.chunkCount +
+        " chunks → " + result.fileName;
+      setIngestionStep(1);
+
+      await loadIngestionFiles();
+      selectIngestionFile(result.fileName);
+    } catch (err) {
+      elements.ingestionFetchResult.hidden = false;
+      elements.ingestionFetchResult.textContent = "❌ " + err.message + (err.detail ? " — " + err.detail : "");
+    } finally {
+      elements.ingestionFetchBtn.disabled = false;
+    }
+  }
+
+  async function runIngestionEmbed() {
+    const fileName = state.ingestionSelectedFile;
+    const collectionName = elements.ingestionCollectionInput.value.trim();
+    const indexName = elements.ingestionIndexInput.value.trim();
+    if (!fileName) { showToast("Select a file from Step 2 first.", true); return; }
+    if (!collectionName || !indexName) { return; }
+
+    elements.ingestionEmbedBtn.disabled = true;
+    elements.ingestionEmbedResult.hidden = true;
+    setIngestionStep(2);
+    try {
+      let res;
+      try {
+        res = await fetch("/api/admin/ingest/embed", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileName: fileName, collectionName: collectionName, indexName: indexName }),
+        });
+      } catch (e) {
+        throw ingestionNetworkError();
+      }
+      if (!res.ok) throw await httpError("Embed & Store failed", res);
+
+      const result = await res.json();
+      elements.ingestionEmbedResult.hidden = false;
+      elements.ingestionEmbedResult.textContent =
+        "✅ Embedded " + result.chunksEmbedded + " chunk(s) into \"" + collectionName +
+        "\" in " + (result.tookMs / 1000).toFixed(1) + "s";
+      setIngestionStep(3);
+    } catch (err) {
+      elements.ingestionEmbedResult.hidden = false;
+      elements.ingestionEmbedResult.textContent = "❌ " + err.message + (err.detail ? " — " + err.detail : "");
+    } finally {
+      elements.ingestionEmbedBtn.disabled = false;
+    }
+  }
+
+  // True only when the most recent message in the chat is itself a
+  // Knowledge Search answer - anything else (a Langflow response, a fresh
+  // panel search, an empty chat) means a composer submission should NOT be
+  // treated as a Knowledge Search follow-up.
+  function lastMessageIsKnowledgeAnswer() {
+    const children = elements.chatMessages.children;
+    if (!children.length) return false;
+    const last = children[children.length - 1];
+    return last.classList.contains("message-assistant") && !!last.dataset.knowledgeSource;
+  }
+
   elements.composer.addEventListener("submit", function (evt) {
     evt.preventDefault();
+    // Every send path (sendUserStory/sendFileStory/sendJiraStory/
+    // sendKnowledgeQuery) disables sendBtn while its request is in flight -
+    // reuse that as a busy guard. Without this, submitting a follow-up
+    // before the previous answer lands races lastMessageIsKnowledgeAnswer():
+    // the in-flight typing indicator carries the same "message-assistant"
+    // class as a real answer but no knowledgeSource, so the follow-up
+    // silently falls through to the wrong input path (confirmed against
+    // real data - a Knowledge Search follow-up submitted too quickly landed
+    // on the Langflow test-case-generation flow instead).
+    if (elements.sendBtn.disabled) {
+      showToast("Please wait for the current response to finish.", false);
+      return;
+    }
     const text = elements.chatInput.value.trim();
     const file = state.attachedFile;
 
@@ -1435,6 +1789,12 @@
     if (!text) return;
     elements.chatInput.value = "";
     autoResizeInput();
+
+    if (lastMessageIsKnowledgeAnswer()) {
+      runKnowledgeFollowUp(text);
+      return;
+    }
+
     sendUserStory(text);
   });
 
@@ -1662,6 +2022,7 @@
   const MODEL_STORAGE_KEY = "tcgen_selected_model";
 
   const MODEL_LIST = [
+    "gemini-flash-latest",
     "gemini-2.5-flash",
     "gemini-2.5-pro",
     "gemini-2.5-flash-lite",
@@ -2462,6 +2823,8 @@
       if (!elements.jiraPanel.hidden) {
         hideJiraPanel();
       } else {
+        hideKnowledgePanel();
+        hideIngestionPanel();
         showJiraFetchPanel();
       }
     });
@@ -2477,6 +2840,43 @@
       if (e.key === "Enter") fetchJiraTicket();
     });
     elements.jiraGenerateBtn.addEventListener("click", sendJiraStory);
+
+    // Knowledge search
+    elements.knowledgeBtn.addEventListener("click", function () {
+      if (!elements.knowledgePanel.hidden) {
+        hideKnowledgePanel();
+      } else {
+        hideJiraPanel();
+        hideIngestionPanel();
+        showKnowledgePanel();
+      }
+    });
+    elements.knowledgeCloseBtn.addEventListener("click", hideKnowledgePanel);
+    elements.knowledgeSearchBtn.addEventListener("click", runKnowledgeSearch);
+    elements.knowledgeQueryInput.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") runKnowledgeSearch();
+    });
+
+    // Ingestion Wizard (modal overlay on the main chat)
+    elements.ingestionBtn.addEventListener("click", function () {
+      if (document.body.classList.contains("ingestion-mode")) {
+        hideIngestionPanel();
+      } else {
+        hideJiraPanel();
+        hideKnowledgePanel();
+        showIngestionPanel();
+      }
+    });
+    elements.ingestionCloseBtn.addEventListener("click", hideIngestionPanel);
+    elements.ingestionCancelBtn.addEventListener("click", hideIngestionPanel);
+    // Click the dimmed backdrop (not the card itself) to close, like any
+    // other modal.
+    elements.ingestionView.addEventListener("click", function (e) {
+      if (e.target === elements.ingestionView) hideIngestionPanel();
+    });
+    elements.ingestionFetchBtn.addEventListener("click", runIngestionFetch);
+    elements.ingestionRefreshFilesBtn.addEventListener("click", loadIngestionFiles);
+    elements.ingestionEmbedBtn.addEventListener("click", runIngestionEmbed);
   }
 
   function init() {

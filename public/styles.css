@@ -94,13 +94,13 @@ body {
   border-top: none;
   background: transparent;
   width: 100%;
-  max-width: 640px;
+  max-width: 760px;
   padding: 24px 24px 0;
 }
 
 .composer-footer {
   width: 100%;
-  max-width: 640px;
+  max-width: 760px;
   padding: 10px 24px 0;
   display: flex;
   flex-direction: column;
@@ -270,7 +270,7 @@ body {
 }
 
 .composer-inner {
-  max-width: 580px;
+  max-width: 760px;
   margin: 0 auto;
 }
 
@@ -320,6 +320,15 @@ body {
   font-size: 0.82rem;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+/* Without this, the `hidden` attribute has no visual effect here: this
+   class's own `display: inline-flex` and the UA stylesheet's `[hidden] {
+   display: none }` are the same specificity tier, and author styles always
+   beat UA styles on a tie - so a plain `.composer-tool-btn` rule silently
+   overrides `hidden` unless this rule (class + attribute) tips the tie back. */
+.composer-tool-btn[hidden] {
+  display: none;
 }
 
 .composer-tool-btn:hover:not(:disabled) {
@@ -393,13 +402,13 @@ body {
 
 .jira-id-input {
   flex: 1;
-  padding: 8px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
   color: var(--color-text);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   outline: none;
   transition: border-color 0.15s ease;
 }
@@ -496,6 +505,271 @@ body {
 
 .jira-generate-btn:hover {
   opacity: 0.85;
+}
+
+.jira-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ingestion-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.ingestion-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.ingestion-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.ingestion-file-row.selected {
+  border-color: var(--color-primary);
+}
+
+.ingestion-file-row .ingestion-file-name {
+  flex: 1;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ingestion-file-row .ingestion-file-meta {
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+/* ---------- Ingestion Wizard (modal overlay on the main chat) ---------- */
+
+.ingestion-view {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 18, 25, 0.5);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+body.ingestion-mode .ingestion-view {
+  display: flex;
+}
+
+.ingestion-card {
+  width: 100%;
+  max-width: 960px;
+  max-height: 85vh;
+  display: flex;
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.ingestion-sidebar {
+  flex: 0 0 260px;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 28px 20px;
+}
+
+.ingestion-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ingestion-sidebar-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  /* Same mark as .empty-state-badge (the main TestPilot hero icon) - kept
+     in sync so the brand mark looks identical everywhere it appears. */
+  background: linear-gradient(135deg, #1a2233, #3d4966);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+}
+
+.ingestion-sidebar-title {
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.ingestion-sidebar-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.ingestion-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ingestion-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+}
+
+.ingestion-step-num {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-border);
+  color: var(--color-text-muted, #6b7280);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.ingestion-step-title {
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #6b7280);
+}
+
+.ingestion-step-desc {
+  margin-top: 2px;
+  font-size: 0.76rem;
+  color: var(--color-text-muted, #9ca3af);
+}
+
+.ingestion-step.active {
+  background: var(--color-surface-hover, rgba(37, 99, 235, 0.06));
+}
+
+.ingestion-step.active .ingestion-step-num {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.ingestion-step.active .ingestion-step-title {
+  color: var(--color-text);
+}
+
+.ingestion-step.done .ingestion-step-num {
+  background: #16a34a;
+  color: #fff;
+}
+
+.ingestion-cancel-btn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #6b7280);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ingestion-cancel-btn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted, #9ca3af);
+}
+
+.ingestion-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 56px;
+}
+
+.ingestion-main-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+}
+
+.ingestion-main-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.ingestion-main-body {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.ingestion-main-body .jira-field-group {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .ingestion-view {
+    padding: 0;
+  }
+  .ingestion-card {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .ingestion-sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .ingestion-main {
+    padding: 28px 20px;
+  }
+}
+
+.composer-tool-divider {
+  width: 1px;
+  height: 20px;
+  align-self: center;
+  background: var(--color-border);
+  margin: 0 2px;
+}
+
+/* Sized to its content (a short label like "Test Plan") instead of sharing
+   .jira-id-input's flex:1, so the query input takes the remaining space -
+   the dropdown reads as a compact pill, not a stretched-out select. */
+#knowledge-source-select {
+  flex: 0 0 auto;
+  width: auto;
 }
 
 .tool-icon-plus {
@@ -641,14 +915,14 @@ body {
   box-sizing: border-box;
   resize: none;
   font-family: inherit;
-  font-size: 0.97rem;
-  padding: 4px 4px;
+  font-size: 1rem;
+  padding: 10px 8px;
   border: none;
   background: transparent;
   color: var(--color-text);
   outline: none;
-  min-height: 44px;
-  max-height: 160px;
+  min-height: 56px;
+  max-height: 200px;
   overflow-y: hidden;
 }
 

@@ -8,6 +8,8 @@
 require("dotenv").config();
 const express = require("express");
 const path = require("path");
+const { queryTestPlan } = require("./src/scripts/testplanRetriever");
+const { listChunkFiles, runFetch, runEmbed } = require("./src/scripts/ingestionAdmin");
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -18,6 +20,7 @@ const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || "";
 const JIRA_AC_FIELD_ID = process.env.JIRA_AC_FIELD_ID || "";
 
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json());
 
 // ---- Atlassian Document Format (ADF) -> plain text -------------------------
 // Jira Cloud's REST API v3 returns rich-text fields (description, and any
@@ -111,6 +114,73 @@ app.get("/api/jira/:ticketId", async (req, res) => {
     description: fieldToText(issueFields.description),
     acceptanceCriteria: JIRA_AC_FIELD_ID ? fieldToText(issueFields[JIRA_AC_FIELD_ID]) : "",
   });
+});
+
+// Knowledge search (4th input): RAG over the org's own content, independent
+// of the Langflow flow used by the other 3 input modes. "testcases" and
+// "prd" are not wired up - the Test Cases collection was removed (shown as
+// "coming soon" in the dropdown, matching PRD's not-yet-built state).
+const KNOWLEDGE_SOURCES = {
+  testplan: queryTestPlan,
+};
+
+app.post("/api/knowledge/query", async function (req, res) {
+  const source = (req.body && req.body.source) || "";
+  const query = (req.body && req.body.query || "").trim();
+  // Optional - a separate session concept from the Langflow modes' session_id
+  // (see public/app.js). Omitted entirely = stateless, same as Phase 1.
+  const sessionId = (req.body && req.body.sessionId) || undefined;
+
+  if (!query) return res.status(400).json({ error: "Missing query." });
+
+  const handler = KNOWLEDGE_SOURCES[source];
+  if (!handler) {
+    return res.status(400).json({ error: "Unsupported source: " + source + ". Available: " + Object.keys(KNOWLEDGE_SOURCES).join(", ") + "." });
+  }
+
+  try {
+    const result = await handler(query, sessionId);
+    res.json(result);
+  } catch (err) {
+    console.error("Knowledge query failed:", err.message);
+    res.status(502).json({ error: "Knowledge query failed: " + err.message });
+  }
+});
+
+// Ingestion admin panel: run the Confluence fetch -> chunk -> embed pipeline
+// from the browser instead of the CLI scripts directly. Wraps the same
+// reusable functions the CLI scripts call themselves (see ingestionAdmin.js)
+// - a source and its destination collection/index are form input here
+// instead of hardcoded env vars.
+app.get("/api/admin/ingest/files", function (req, res) {
+  try {
+    res.json({ files: listChunkFiles() });
+  } catch (err) {
+    console.error("Listing chunk files failed:", err.message);
+    res.status(500).json({ error: "Listing chunk files failed: " + err.message });
+  }
+});
+
+app.post("/api/admin/ingest/fetch", async function (req, res) {
+  const { pageId, mode, sourceName } = req.body || {};
+  try {
+    const result = await runFetch({ pageId, mode, sourceName });
+    res.json(result);
+  } catch (err) {
+    console.error("Ingestion fetch failed:", err.message);
+    res.status(400).json({ error: "Ingestion fetch failed: " + err.message });
+  }
+});
+
+app.post("/api/admin/ingest/embed", async function (req, res) {
+  const { fileName, collectionName, indexName } = req.body || {};
+  try {
+    const result = await runEmbed({ fileName, collectionName, indexName });
+    res.json(result);
+  } catch (err) {
+    console.error("Ingestion embed failed:", err.message);
+    res.status(400).json({ error: "Ingestion embed failed: " + err.message });
+  }
 });
 
 app.listen(PORT, function () {

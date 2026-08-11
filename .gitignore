@@ -1,3 +1,6 @@
 public/config.js
+/config.js
 node_modules/
 .env
+src/data/
+.playwright-mcp/

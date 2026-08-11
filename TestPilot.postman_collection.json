@@ -1,0 +1,267 @@
+{
+  "info": {
+    "name": "TestPilot API Collection",
+    "description": "Every API this app talks to, both directions.\n\n- **TestPilot Backend** (5 requests): the app's own Express server (server.js) — Jira proxy, Knowledge Search RAG, and the Ingestion admin panel. Run these against your own running instance ({{baseUrl}}, default http://localhost:8000).\n- **Langflow (External)** (6 requests): called directly from the browser (public/app.js) to power the 3 original input modes (typed story / file / Jira) — generation, flow-definition lookup, file upload (2 variants), and conversation history (fetch + delete). Run these against your Langflow instance ({{langflowBaseUrl}}, default http://localhost:7860).\n\nNone of these routes require a Postman-side auth helper — auth is either a raw `x-api-key` header (Langflow) or handled server-side and invisible to the client (Jira, Confluence, Mistral, Google credentials all live in TestPilot's own .env, never sent by the browser).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000", "type": "string" },
+    { "key": "langflowBaseUrl", "value": "http://localhost:7860", "type": "string" },
+    { "key": "langflowFlowId", "value": "your-flow-id", "type": "string" },
+    { "key": "langflowApiKey", "value": "your-langflow-api-key", "type": "string" },
+    { "key": "sessionId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "TestPilot Backend",
+      "description": "server.js — the app's own Express backend. Static file serving aside, this is the complete route list; nothing else is exposed.",
+      "item": [
+        {
+          "name": "Jira - Fetch Ticket",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/jira/:ticketId",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "jira", ":ticketId"],
+              "variable": [
+                { "key": "ticketId", "value": "PROJ-123", "description": "Any Jira issue key from your configured JIRA_BASE_URL" }
+              ]
+            },
+            "description": "Server-side Jira proxy — the Jira API token lives only in .env and never reaches the browser. Pulls Summary, Description, and (if JIRA_AC_FIELD_ID is set) Acceptance Criteria, converting Atlassian Document Format rich-text fields to plain text.\n\nErrors: 400 (missing ticket ID), 404 (ticket not found), 500 (Jira proxy not configured - missing env vars), 502 (Jira unreachable or auth failed)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/jira/PROJ-123" } },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"PROJ-123\",\n  \"summary\": \"As a user, I want to reset my password via email\",\n  \"description\": \"Full ticket description text...\",\n  \"acceptanceCriteria\": \"- Given ...\\n- When ...\\n- Then ...\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Knowledge Search - Query",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "knowledge", "query"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"testplan\",\n  \"query\": \"What is the Primary Objective of Losing Perception: Egregious Cases ?\",\n  \"sessionId\": \"\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "The 4th input mode's RAG pipeline (LangChain, independent of Langflow) — real hybrid search (BM25 + vector, via EnsembleRetriever) over the Confluence-ingested `test_plans` collection in MongoDB Atlas.\n\n- `source`: only `\"testplan\"` is currently wired up (`testcases` and `prd` are disabled in the UI dropdown - the Test Cases collection was removed, PRD isn't built as a distinct source yet).\n- `query`: required, the question to answer.\n- `sessionId`: optional. Omit entirely (or send `\"\"`) for a stateless one-off question. Provide a stable UUID across calls to get history-aware follow-ups - the retriever will reformulate ambiguous follow-up questions using prior turns, and the final answer prompt also sees the conversation history so it can resolve pronouns like \"it\"/\"its\".\n\nErrors: 400 (missing query, or unsupported source), 502 (retrieval/generation failed - e.g. LLM quota exceeded)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/knowledge/query" } },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"answer\": \"The **Primary Objective** of **Losing Perception: Egregious Cases** is to create product interventions for players who are on a losing streak...\\n\\n- Recommend a lower EF on Results Screen\\n- Recommend player to move from 6 seat to 2 seat\",\n  \"sources\": [\n    { \"title\": \"[PRD] Losing Perception: Egregious Cases\", \"url\": \"https://...\", \"pageId\": \"3896180861\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ingestion - List Chunk Files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/files",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "files"]
+            },
+            "description": "Ingestion Wizard Step 2 - lists every intermediate chunk JSON file sitting in src/data/ (newest first), regardless of which source produced it. Not scoped to the current session - shows every file ever fetched.\n\nErrors: 500 (couldn't read the src/data directory)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/admin/ingest/files" } },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"files\": [\n    { \"fileName\": \"testplan-chunks.json\", \"sizeBytes\": 3300000, \"mtime\": \"2026-08-07T16:34:16.230Z\" },\n    { \"fileName\": \"egregiousdoc-chunks.json\", \"sizeBytes\": 33666, \"mtime\": \"2026-08-07T16:03:00.000Z\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ingestion - Fetch & Chunk",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/fetch",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "fetch"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pageId\": \"3538488108\",\n  \"mode\": \"descendants\",\n  \"sourceName\": \"TestPlan\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Ingestion Wizard Step 1 - fetches a Confluence page (Jira Cloud/Confluence credentials come from .env, never sent by the client), converts its storage-format XML to plain text, chunks it, and writes the result to src/data/<slug>-chunks.json (slug derived from sourceName).\n\n- `pageId`: required. Any Confluence page ID - works identically whether it's a root folder or a whole space's homepage (Confluence treats a homepage as an ordinary page).\n- `mode`: `\"descendants\"` (default if omitted - fetches pageId plus its full descendant subtree) or `\"single\"` (fetches just that one page, no descendants - used for adding/updating one page without touching the rest of an already-ingested source).\n- `sourceName`: required. Tags every chunk's metadata.docType AND derives the output filename (slugified) - e.g. \"PRD\" -> docType \"PRD\", file src/data/prd-chunks.json. For an existing source, reuse its exact original sourceName to keep tagging consistent.\n\nErrors: 400 (missing pageId/sourceName, or the Confluence API call failed)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/admin/ingest/fetch" } },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"pageCount\": 111,\n  \"chunkCount\": 2728,\n  \"fileName\": \"testplan-chunks.json\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Ingestion - Embed & Store",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/embed",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "embed"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"testplan-chunks.json\",\n  \"collectionName\": \"test_plans\",\n  \"indexName\": \"vector_index_test_plans\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Ingestion Wizard Step 3 - embeds a previously-fetched chunks file (Mistral - hardcoded regardless of CHAT_MODEL_PROVIDER, since the corpus must stay in one consistent embedding space) and stores it into the given MongoDB collection.\n\nIdempotent by page: before inserting, deletes any existing chunks sharing a pageId with the incoming file, so re-running (for a full source or a single updated page) always replaces rather than duplicates.\n\n- `fileName`: required. Must be one of the files returned by Ingestion - List Chunk Files (resolved strictly inside src/data/ server-side - a path-traversal attempt is rejected).\n- `collectionName` / `indexName`: required. Storing into a brand-new collection/index name always succeeds at the insert level, but vector/BM25 search against a genuinely new index won't work until that index is created in Atlas (a manual step, outside this app).\n\nErrors: 400 (missing fields, invalid fileName, input file not found, or the embed/store call failed - e.g. Mistral rate limit)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/api/admin/ingest/embed" } },
+              "status": "OK",
+              "code": 200,
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"chunksEmbedded\": 2728,\n  \"tookMs\": 25883\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Langflow (External)",
+      "description": "Called directly from the browser (public/app.js), never proxied through TestPilot's own server - these power the 3 original input modes (typed story, attached file, Jira ticket) and the sidebar's conversation history. All require the `x-api-key` header from config.js.",
+      "item": [
+        {
+          "name": "Langflow - Run Flow (Generate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{langflowApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v1/run/{{langflowFlowId}}",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v1", "run", "{{langflowFlowId}}"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"output_type\": \"chat\",\n  \"input_type\": \"chat\",\n  \"input_value\": \"As a user, I want to reset my password via email so that I can regain access to my account.\",\n  \"session_id\": \"{{sessionId}}\",\n  \"tweaks\": {}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "The core generation call shared by all 3 Langflow-based input modes (typed story, attached file, Jira ticket) and their follow-ups - only `input_value` and `tweaks` differ per mode:\n- Typed story: `input_value` = the story text.\n- File mode: `input_value` = \"Generate test cases from the attached PRD: <filename>\", `tweaks` includes `{ [FILE_COMPONENT_ID]: { path: <uploaded server path> } }`.\n- Jira mode: `tweaks` includes `{ [PREFETCHED_STORY_COMPONENT_ID]: { prefetched_story: <ticket fields> } }`.\n- Any mode: `tweaks` is merged with `CONFIG.MODEL_TWEAKS` (the model-selector dropdown's current choice) on every call.\n\nRuns Langflow's 2-stage Writer -> Reviewer pipeline (Gemini) server-side within Langflow; can take 30-90+ seconds for the full pipeline."
+          }
+        },
+        {
+          "name": "Langflow - Get Flow Definition",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{langflowApiKey}}" }],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v1/flows/{{langflowFlowId}}",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v1", "flows", "{{langflowFlowId}}"]
+            },
+            "description": "Used only for auto-discovery: if FILE_COMPONENT_ID or PREFETCHED_STORY_COMPONENT_ID isn't pinned in config.js, the app fetches the full flow definition once and searches its node list by type/ID pattern to find the right component - then caches the result for the rest of the session."
+          }
+        },
+        {
+          "name": "Langflow - Upload File (v2)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{langflowApiKey}}" }],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v2/files",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v2", "files"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "A .pdf, .txt, or .md file" }
+              ]
+            },
+            "description": "File mode step 1 on modern Langflow versions - uploads the attached PRD file and returns a server-side path, later passed into Langflow - Run Flow's `tweaks` so the File component reads it. Falls back to the legacy endpoint below on 404 (older Langflow)."
+          }
+        },
+        {
+          "name": "Langflow - Upload File (Legacy v1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{langflowApiKey}}" }],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v1/files/upload/{{langflowFlowId}}",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v1", "files", "upload", "{{langflowFlowId}}"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "", "description": "A .pdf, .txt, or .md file" }
+              ]
+            },
+            "description": "Fallback used automatically when the modern /api/v2/files upload returns 404 (older self-hosted Langflow versions that predate the v2 files API)."
+          }
+        },
+        {
+          "name": "Langflow - Get Session Messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{langflowApiKey}}" }],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v1/monitor/messages?flow_id={{langflowFlowId}}&session_id={{sessionId}}",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v1", "monitor", "messages"],
+              "query": [
+                { "key": "flow_id", "value": "{{langflowFlowId}}" },
+                { "key": "session_id", "value": "{{sessionId}}" }
+              ]
+            },
+            "description": "Restores a past conversation's message history from Langflow's own monitor/logging store when a user reopens it from the sidebar (message content itself is never duplicated into TestPilot's own storage - only session metadata is kept in localStorage). Handles both `{ data: [...] }` and plain `[...]` response shapes across Langflow versions."
+          }
+        },
+        {
+          "name": "Langflow - Delete Session Messages",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "x-api-key", "value": "{{langflowApiKey}}" }],
+            "url": {
+              "raw": "{{langflowBaseUrl}}/api/v1/monitor/messages?session_id={{sessionId}}&flow_id={{langflowFlowId}}",
+              "host": ["{{langflowBaseUrl}}"],
+              "path": ["api", "v1", "monitor", "messages"],
+              "query": [
+                { "key": "session_id", "value": "{{sessionId}}" },
+                { "key": "flow_id", "value": "{{langflowFlowId}}" }
+              ]
+            },
+            "description": "Best-effort cleanup when a user deletes a conversation from the sidebar - a 404 (older Langflow versions without this endpoint) is treated as success by the app; local history is removed either way."
+          }
+        }
+      ]
+    }
+  ]
+}

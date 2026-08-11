@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TestPilot — The Complete Guide</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --good:           #0ca30c;
+    --good-text:      #006300;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #d03b3b;
+    /* categorical — assigned by IDENTITY, fixed everywhere in this doc */
+    --c-langchain:    #2a78d6;  /* blue    — LangChain components (new) */
+    --c-langflow:     #eb6834;  /* orange  — Langflow / original 3 inputs */
+    --c-datastore:    #1baf7a;  /* aqua    — MongoDB / Confluence (data) */
+    --c-model:        #eda100;  /* yellow  — AI models (Mistral / Gemini) */
+    --c-frontend:     #e87ba4;  /* magenta — Browser / UI */
+    --c-custom:       #4a3aa7;  /* violet  — our own hand-written code */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --good:           #0ca30c;
+      --good-text:      #0ca30c;
+      --warning:        #fab219;
+      --serious:        #ec835a;
+      --critical:       #e66767;
+      --c-langchain:    #3987e5;
+      --c-langflow:     #d95926;
+      --c-datastore:    #199e70;
+      --c-model:        #c98500;
+      --c-frontend:     #d55181;
+      --c-custom:       #9085e9;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --good:           #0ca30c;
+    --good-text:      #0ca30c;
+    --warning:        #fab219;
+    --serious:        #ec835a;
+    --critical:       #e66767;
+    --c-langchain:    #3987e5;
+    --c-langflow:     #d95926;
+    --c-datastore:    #199e70;
+    --c-model:        #c98500;
+    --c-frontend:     #d55181;
+    --c-custom:       #9085e9;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 120px; }
+
+  /* ---- top bar ---- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex; align-items: center; gap: 16px;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .topbar a { color: var(--text-secondary); text-decoration: none; font-size: 0.82rem; font-weight: 600; padding: 6px 10px; border-radius: 6px; }
+  .topbar a:hover { background: var(--gridline); color: var(--text-primary); }
+  .topbar .brand { color: var(--text-primary); font-weight: 800; margin-right: 8px; }
+  .theme-toggle { margin-left: auto; border: 1px solid var(--border); background: var(--page); color: var(--text-secondary); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 0.8rem; }
+
+  /* ---- hero ---- */
+  .hero { padding: 64px 0 32px; }
+  .hero .kicker { color: var(--c-langchain); font-weight: 700; font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; }
+  .hero h1 { font-size: 2.6rem; margin: 10px 0 12px; letter-spacing: -0.01em; }
+  .hero p.lede { font-size: 1.15rem; color: var(--text-secondary); max-width: 720px; }
+
+  /* ---- section shell ---- */
+  section { padding: 56px 0; border-top: 1px solid var(--gridline); }
+  section:first-of-type { border-top: none; }
+  .section-label { color: var(--text-muted); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+  h2 { font-size: 1.7rem; margin: 0 0 14px; }
+  h3 { font-size: 1.2rem; margin: 28px 0 10px; }
+  p { color: var(--text-secondary); }
+  .lead { font-size: 1.05rem; color: var(--text-primary); }
+  strong { color: var(--text-primary); }
+  a.inline { color: var(--c-langchain); font-weight: 600; text-decoration: none; border-bottom: 1px solid currentColor; }
+
+  /* ---- cards / grid ---- */
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .grid-4, .grid-2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 1rem; }
+  .card p { margin: 0; font-size: 0.92rem; }
+  .card .tag { display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 100px; margin-bottom: 10px; color: #fff; }
+
+  /* ---- callout / explain box ---- */
+  .explain {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--c-langchain);
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin: 16px 0;
+  }
+  .explain.custom { border-left-color: var(--c-custom); }
+  .explain .k { font-weight: 800; font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-langchain); margin-bottom: 6px; display:block; }
+  .explain.custom .k { color: var(--c-custom); }
+  .explain p { margin: 0; font-size: 0.94rem; }
+  .explain p + p { margin-top: 8px; }
+
+  /* ---- diagram ---- */
+  .diagram { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin: 18px 0; overflow-x: auto; }
+  .flow-row { display: flex; align-items: stretch; gap: 0; flex-wrap: nowrap; min-width: max-content; }
+  .flow-col { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .box {
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    background: var(--page);
+    font-size: 0.82rem;
+    text-align: center;
+    min-width: 128px;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative;
+  }
+  .box .t { font-weight: 700; color: var(--text-primary); font-size: 0.85rem; }
+  .box .s { color: var(--text-muted); font-size: 0.72rem; margin-top: 2px; }
+  .box[data-type="langchain"] { border-top: 3px solid var(--c-langchain); }
+  .box[data-type="langflow"]  { border-top: 3px solid var(--c-langflow); }
+  .box[data-type="datastore"] { border-top: 3px solid var(--c-datastore); }
+  .box[data-type="model"]     { border-top: 3px solid var(--c-model); }
+  .box[data-type="frontend"]  { border-top: 3px solid var(--c-frontend); }
+  .box[data-type="custom"]    { border-top: 3px solid var(--c-custom); }
+  .arrow-h { display: flex; align-items: center; justify-content: center; min-width: 34px; color: var(--text-muted); font-size: 1.1rem; }
+  .arrow-v { display: flex; align-items: center; justify-content: center; padding: 4px 0; color: var(--text-muted); font-size: 1.1rem; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--gridline); font-size: 0.78rem; color: var(--text-secondary); }
+  .legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---- stat tile ---- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .stat .label { font-size: 0.74rem; color: var(--text-muted); margin-bottom: 4px; }
+  .stat .value { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+  .stat .delta { font-size: 0.78rem; margin-top: 3px; }
+  .stat .delta.good { color: var(--good-text); }
+
+  /* ---- before/after ---- */
+  .ba-row { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: center; margin: 14px 0; }
+  @media (max-width: 700px) { .ba-row { grid-template-columns: 1fr; } .ba-row .arrow-h { transform: rotate(90deg); } }
+  .ba-col { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .ba-col .h { font-weight: 800; font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 8px; }
+  .ba-col.before .h { color: var(--text-muted); }
+  .ba-col.after .h { color: var(--good-text); }
+  .ba-col ul { margin: 0; padding-left: 18px; font-size: 0.88rem; }
+  .ba-col li { margin-bottom: 5px; }
+
+  /* ---- timeline ---- */
+  .timeline { position: relative; margin: 24px 0 8px; padding-left: 28px; }
+  .timeline::before { content: ""; position: absolute; left: 8px; top: 6px; bottom: 6px; width: 2px; background: var(--gridline); }
+  .tl-item { position: relative; padding-bottom: 26px; }
+  .tl-item::before { content: ""; position: absolute; left: -28px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--surface-1); border: 3px solid var(--c-langchain); }
+  .tl-item.langflow::before { border-color: var(--c-langflow); }
+  .tl-item .tl-tag { font-weight: 800; font-size: 0.72rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--c-langchain); }
+  .tl-item .tl-title { font-weight: 700; font-size: 1.02rem; margin: 3px 0 4px; }
+  .tl-item p { margin: 0; font-size: 0.9rem; }
+
+  /* ---- table ---- */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 0.88rem; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--gridline); vertical-align: top; }
+  th { color: var(--text-muted); font-weight: 700; font-size: 0.74rem; letter-spacing: 0.03em; text-transform: uppercase; }
+  td code, p code, li code { background: var(--gridline); padding: 1px 6px; border-radius: 4px; font-size: 0.85em; color: var(--text-primary); }
+
+  /* ---- badges ---- */
+  .badge { display: inline-block; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; padding: 2px 9px; border-radius: 100px; color: #fff; }
+  .badge.langchain { background: var(--c-langchain); }
+  .badge.langflow  { background: var(--c-langflow); }
+  .badge.datastore { background: var(--c-datastore); }
+  .badge.model     { background: var(--c-model); color:#231800; }
+  .badge.frontend  { background: var(--c-frontend); }
+  .badge.custom    { background: var(--c-custom); }
+  .badge.good      { background: var(--good); }
+
+  /* ---- steps ---- */
+  .steps { margin: 16px 0; padding: 0; list-style: none; counter-reset: step; }
+  .steps li { counter-increment: step; position: relative; padding: 0 0 22px 42px; border-left: 2px solid var(--gridline); margin-left: 14px; }
+  .steps li:last-child { border-left-color: transparent; padding-bottom: 4px; }
+  .steps li::before { content: counter(step); position: absolute; left: -14px; top: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--c-langchain); color: #fff; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center; }
+  .steps li .st-title { font-weight: 700; margin-bottom: 3px; }
+  .steps li p { margin: 0; font-size: 0.9rem; }
+
+  /* ---- glossary ---- */
+  .glossary dt { font-weight: 700; color: var(--text-primary); margin-top: 14px; }
+  .glossary dd { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.92rem; }
+
+  .toc-note { color: var(--text-muted); font-size: 0.85rem; }
+  footer { text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 40px 0; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="brand">✈️ TestPilot</span>
+  <a href="#big-picture">Big picture</a>
+  <a href="#original-3">Original 3 inputs</a>
+  <a href="#fourth-input">4th input</a>
+  <a href="#journey">The journey</a>
+  <a href="#langchain-explained">LangChain, simply</a>
+  <a href="#why-langchain">Why LangChain</a>
+  <a href="#architecture">Full architecture</a>
+  <a href="#sequence">Step by step</a>
+  <a href="#providers">Mistral vs Gemini</a>
+  <a href="#future">What's next</a>
+  <a href="#add-source">Add a new source</a>
+  <a href="#glossary">Glossary</a>
+  <button class="theme-toggle" onclick="toggleTheme()">🌓 Theme</button>
+</div>
+
+<div class="wrap">
+
+  <div class="hero">
+    <div class="kicker">TestPilot — Complete Architecture Guide</div>
+    <h1>How TestPilot actually works</h1>
+    <p class="lede">A plain-language walkthrough of everything TestPilot does — the original 3 test-case-generation inputs, the brand-new 4th input (a LangChain-powered knowledge assistant), why it was built the way it was, and how to extend it. Written so it makes sense even if you've never touched LangChain or RAG before.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <section id="big-picture">
+    <div class="section-label">Start here</div>
+    <h2>The big picture: one app, four ways in</h2>
+    <p class="lead">TestPilot is a chat app for QA work. You can talk to it in four different ways. The first three all end with the same result — new, freshly generated test cases. The fourth is different on purpose: instead of generating something new, it lets you ask questions about test knowledge that already exists.</p>
+
+    <div class="grid-4">
+      <div class="card">
+        <span class="tag" style="background:var(--c-langflow)">Input 1</span>
+        <h4>Type a user story</h4>
+        <p>Paste a plain-English requirement. The app generates structured test cases from scratch.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--c-langflow)">Input 2</span>
+        <h4>Attach a PRD file</h4>
+        <p>Upload a requirements document (PDF/TXT/MD). Same generation pipeline, fed by the file instead of typed text.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--c-langflow)">Input 3</span>
+        <h4>Connect a Jira ticket</h4>
+        <p>Pull a ticket's Summary/Description/Acceptance Criteria automatically, review it, then generate.</p>
+      </div>
+      <div class="card" style="border-color:var(--c-langchain)">
+        <span class="tag" style="background:var(--c-langchain)">Input 4 — NEW</span>
+        <h4>Ask Knowledge Search</h4>
+        <p>Ask a question about test plans or test cases you <em>already have</em>. No generation — just accurate answers, with sources.</p>
+      </div>
+    </div>
+
+    <div class="explain">
+      <span class="k">The one-sentence version</span>
+      <p>Inputs 1–3 answer "help me write new test cases for this requirement." Input 4 answers "tell me what we already know" — and it's built on a completely different, independent technology (LangChain) from the other three (which run on a tool called Langflow). This guide explains both, but spends most of its time on Input 4, since that's what was actually built this session.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="original-3">
+    <div class="section-label">Inputs 1, 2, 3</div>
+    <h2>The original 3 inputs: how test case generation works</h2>
+    <p>All three of the original inputs — typed story, attached file, Jira ticket — funnel into the <strong>exact same generation engine</strong>, built in a tool called <strong>Langflow</strong>. Langflow is a visual drag-and-drop canvas for wiring together AI steps, instead of writing all the plumbing code by hand.</p>
+
+    <h3>The two-call "Writer → Reviewer" pipeline</h3>
+    <p>Rather than asking one AI to do everything in one shot, the flow uses <strong>two separate AI calls with two different jobs</strong> — because a single AI call has a practical limit on how much it can produce, and every extra rule you give it just makes it quietly skip something else to make room.</p>
+
+    <div class="diagram">
+      <div class="flow-row">
+        <div class="flow-col">
+          <div class="box" data-type="frontend"><div class="t">Chat Input</div><div class="s">typed story / file / Jira</div></div>
+        </div>
+        <div class="arrow-h">→</div>
+        <div class="flow-col">
+          <div class="box" data-type="langflow"><div class="t">Call 1 — "The Writer"</div><div class="s">builds a full requirement inventory, then writes functional test cases for every item</div></div>
+        </div>
+        <div class="arrow-h">→</div>
+        <div class="flow-col">
+          <div class="box" data-type="model"><div class="t">Gemini (1st call)</div><div class="s">executes the Writer's instructions</div></div>
+        </div>
+        <div class="arrow-h">→</div>
+        <div class="flow-col">
+          <div class="box" data-type="langflow"><div class="t">Call 2 — "The Reviewer"</div><div class="s">re-reads the source fresh, finds gaps, adds edge cases &amp; a coverage audit</div></div>
+        </div>
+        <div class="arrow-h">→</div>
+        <div class="flow-col">
+          <div class="box" data-type="model"><div class="t">Gemini (2nd call)</div><div class="s">executes the Reviewer's instructions</div></div>
+        </div>
+        <div class="arrow-h">→</div>
+        <div class="flow-col">
+          <div class="box" data-type="frontend"><div class="t">Chat Output</div><div class="s">combined result shown to you</div></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--c-frontend)"></span>Browser / UI</span>
+        <span><span class="dot" style="background:var(--c-langflow)"></span>Langflow step</span>
+        <span><span class="dot" style="background:var(--c-model)"></span>AI model</span>
+      </div>
+    </div>
+
+    <div class="explain">
+      <span class="k">In plain English</span>
+      <p><strong>Call 1</strong> is like a diligent junior tester: given a requirement, they inventory every single detail (every table row, every button, every user type) and then write a test case for each one — no skipping, no summarizing.</p>
+      <p><strong>Call 2</strong> is a strict senior reviewer who re-reads the <em>original</em> requirement as if the junior's inventory didn't exist, catches whatever got missed or watered down, writes the missing test cases, adds the nasty edge cases (what happens if two things happen at once? what if someone tampers with a price?), and finally grades the whole set honestly with a coverage report.</p>
+    </div>
+
+    <h3>How Jira tickets get in safely</h3>
+    <p>The <code>server.js</code> Express backend holds your Jira API token — the browser never sees it. When you type a Jira ticket ID, the browser asks <em>your own server</em>, your server asks Jira, and only the clean Summary/Description/Acceptance Criteria come back to you for review before anything gets generated.</p>
+
+    <div class="stats">
+      <div class="stat"><div class="label">Inputs sharing this engine</div><div class="value">3</div></div>
+      <div class="stat"><div class="label">AI calls per generation</div><div class="value">2</div></div>
+      <div class="stat"><div class="label">Where it runs</div><div class="value">Langflow</div></div>
+      <div class="stat"><div class="label">Touched by this session's work?</div><div class="value" style="color:var(--good-text)">No</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="fourth-input">
+    <div class="section-label">Input 4</div>
+    <h2>The 4th input: Knowledge Search</h2>
+    <p class="lead">This is the one built from the ground up this session. It's a chat panel that answers questions using your <strong>organization's own existing data</strong> — not the AI's general training knowledge, and not newly generated content.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <span class="tag" style="background:var(--c-datastore)">Source 1</span>
+        <h4>Test Plan</h4>
+        <p>Confluence pages your QA team already wrote (test plans, chaos-testing sections, functional coverage). Ask a question, get an answer grounded in those real documents, with a link back to the source page.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--c-datastore)">Source 2</span>
+        <h4>Test Cases</h4>
+        <p>An existing library of real test cases in a database. Uses <em>hybrid search</em> — both keyword matching and meaning-based matching at once — to find the most relevant ones.</p>
+      </div>
+    </div>
+
+    <div class="explain custom">
+      <span class="k">Why build this separately from Langflow?</span>
+      <p>Inputs 1–3 are about <em>creating something new</em> from a requirement. Input 4 is about <em>retrieving and explaining something that already exists</em> — a genuinely different job. Rather than force that into the existing Langflow flow, it was built as its own independent pipeline, in this app's own backend, using a different toolkit built specifically for exactly this job: <strong>LangChain</strong>.</p>
+    </div>
+
+    <p>Technically, this means: a completely separate code path (<code>server.js</code>'s <code>/api/knowledge/query</code> route), a separate button and panel in the UI, and zero changes to the 3 original inputs or the Langflow flow they depend on.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="journey">
+    <div class="section-label">How we got here</div>
+    <h2>The journey: four real phases</h2>
+    <p>Input 4 wasn't built in one pass. It went through four distinct, deliberate phases — each one adding a real capability, each one tested against real data before moving on.</p>
+
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-tag">Phase 0</div>
+        <div class="tl-title">Build it by hand first</div>
+        <p>Every piece — fetching Confluence pages, splitting text into chunks, turning text into searchable vectors, combining keyword + meaning search, asking the AI to answer — was written from scratch, with plain code calling Mistral's and MongoDB's raw APIs directly. This proved the idea worked and surfaced real bugs (a pagination bug that silently dropped pages, a formatting bug that leaked raw HTML into stored text, a recall bug where a big page's content never reached the AI).</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-tag">Phase 1</div>
+        <div class="tl-title">Migrate everything to LangChain</div>
+        <p>Every hand-written piece was replaced with the equivalent standard LangChain building block — same behavior, verified against the same real data, but built on a shared, well-tested toolkit instead of custom one-off code. Two more real bugs were found and fixed along the way (a batch size too large for Mistral's API, and a field-mapping bug that silently dropped an ID for half the search results).</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-tag">Phase 2</div>
+        <div class="tl-title">Give it a memory</div>
+        <p>Before this, every question was answered in total isolation — no memory of what you'd just asked. Phase 2 added real conversational follow-ups: ask "what discount types does <em>it</em> support?" right after asking about a specific feature, and it correctly figures out what "it" means.</p>
+      </div>
+      <div class="tl-item">
+        <div class="tl-tag">Phase 2.5</div>
+        <div class="tl-title">Make the AI brand swappable</div>
+        <p>The part of the system that writes answers (not the part that searches) was made <em>configurable</em> — one setting switches it between Mistral and Google's Gemini, without touching anything else. Currently running on Gemini.</p>
+      </div>
+    </div>
+
+    <h3>Before vs. after, concretely</h3>
+    <div class="ba-row">
+      <div class="ba-col before">
+        <div class="h">Before (hand-rolled)</div>
+        <ul>
+          <li>Direct <code>fetch()</code> calls to Mistral's raw API, written and retried by hand</li>
+          <li>A custom-written text splitter (missed a case: one 5,778-character chunk never got split)</li>
+          <li>A hand-written ranking-fusion function for combining keyword + meaning search</li>
+          <li>No conversation memory at all</li>
+          <li>Locked to one AI provider, hardcoded</li>
+        </ul>
+      </div>
+      <div class="arrow-h">→</div>
+      <div class="ba-col after">
+        <div class="h">After (LangChain, this session)</div>
+        <ul>
+          <li>Standard <code>MistralAIEmbeddings</code> / <code>ChatMistralAI</code> classes — same API, no custom plumbing</li>
+          <li><code>RecursiveCharacterTextSplitter</code> — recurses into oversized chunks automatically</li>
+          <li><code>EnsembleRetriever</code> — a pre-built, tested version of the same fusion math</li>
+          <li>Real follow-up memory via <code>createHistoryAwareRetriever</code></li>
+          <li>One environment setting swaps the answering AI (Mistral ⇄ Gemini)</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>The numbers</h3>
+    <div class="stats">
+      <div class="stat"><div class="label">Confluence pages ingested</div><div class="value">111</div></div>
+      <div class="stat"><div class="label">Searchable chunks (after re-chunking)</div><div class="value">2,728</div><div class="delta">was 1,531 with the old chunker</div></div>
+      <div class="stat"><div class="label">New files written</div><div class="value">8</div></div>
+      <div class="stat"><div class="label">Real bugs found &amp; fixed</div><div class="value">6</div></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="langchain-explained">
+    <div class="section-label">The toolkit, in plain words</div>
+    <h2>What is LangChain, really?</h2>
+    <p class="lead"><strong>Analogy:</strong> imagine building a car. You <em>could</em> forge your own bolts, wind your own electrical coils, and machine your own engine mounts from raw metal. Or you could use a catalog of standard parts that every mechanic recognizes, that are already tested, and that snap together in predictable ways. <strong>LangChain is that standard-parts catalog — but for building software that connects documents, search, and AI language models together.</strong></p>
+
+    <p>Every one of the following concepts replaced something we had originally written by hand. Here's each one, explained simply, with what it replaced:</p>
+
+    <h3>Document</h3>
+    <p>A tiny, standard "shipping label" for a piece of text: the text itself (<code>pageContent</code>), plus a box of extra facts about it (<code>metadata</code>) — which page it came from, its title, its URL. Every LangChain tool expects text in exactly this shape, so once your data is in this shape, it works everywhere.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>Our own made-up object shape: <code>{ pageId, title, url, content }</code>. Worked fine, but only <em>we</em> understood it.</p></div>
+
+    <h3>Embeddings</h3>
+    <p>A way to turn any piece of text into a list of ~1,000 numbers (a "vector") that captures its <em>meaning</em>. Two pieces of text about similar things end up with similar number-lists, even if they don't share a single word.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>Our own direct HTTP calls to Mistral's embedding endpoint, with hand-written batching and retry logic.</p></div>
+
+    <h3>Vector store &amp; Retriever</h3>
+    <p>A <strong>vector store</strong> is where all those number-lists get saved (in our case, inside MongoDB Atlas). A <strong>retriever</strong> is the librarian: hand it a question, it instantly finds the documents whose meaning-numbers are closest to the question's meaning-numbers.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>A hand-written MongoDB "$vectorSearch" database query, repeated in two different files.</p></div>
+
+    <h3>A custom Retriever (when the standard one doesn't fit)</h3>
+    <p>Not everything has a ready-made LangChain piece. Our Test Cases source needed <em>keyword</em> search against a specific database index — and LangChain's built-in keyword retriever works entirely in-memory, which would have ignored our real database index completely. So we wrote one small custom class that plugs into LangChain's standard shape, while still doing the actual search our own way.</p>
+    <div class="explain"><span class="k">Key lesson</span><p>LangChain doesn't force everything into its own boxes — custom code and standard LangChain pieces sit side by side, as long as the custom piece speaks the same "shape" (a <code>Document</code> in, a list of <code>Document</code>s out).</p></div>
+
+    <h3>EnsembleRetriever</h3>
+    <p>Takes two (or more) retrievers' separate ranked lists of results and merges them into one combined ranking — rewarding anything that <em>both</em> searches agreed was relevant. This is the standard technique called <strong>Reciprocal Rank Fusion</strong>.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>A hand-written function that manually built a lookup map and did this same ranking math by hand.</p></div>
+
+    <h3>PromptTemplate</h3>
+    <p>A fill-in-the-blanks form for talking to an AI model — instead of gluing strings together by hand every time, you write the instructions once with placeholders (<code>{question}</code>, <code>{excerpts}</code>) and just plug in the real values each time.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>Manual JavaScript string concatenation to build the prompt text.</p></div>
+
+    <h3>LCEL — chaining pieces together (<code>.pipe()</code>)</h3>
+    <p>Short for "LangChain Expression Language." It's the mechanism for snapping pieces together like Lego: <code>prompt.pipe(model)</code> means "take whatever the prompt produces, and feed it straight into the AI model" — instead of manually calling one function, taking its output, and manually feeding it into the next one.</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>Manually calling <code>fetch()</code> with a hand-built request body, and manually digging the answer text out of the raw JSON response.</p></div>
+
+    <h3>Chat model (swappable)</h3>
+    <p>The actual AI "brain" that reads text and writes text back. Because every provider's chat model (Mistral, Gemini, and others) is wrapped in the exact same LangChain shape, swapping which one answers your questions is a one-line change — proven directly in this project.</p>
+
+    <h3>Chat message history</h3>
+    <p>A notebook that remembers a conversation's turns (who said what), scoped to one session, so a later question can refer back to an earlier one ("it", "that test case", "its priority").</p>
+    <div class="explain custom"><span class="k">Replaced</span><p>Nothing — this capability didn't exist at all before Phase 2. It's a new capability made straightforward specifically <em>because</em> LangChain has a standard piece for it.</p></div>
+
+    <h3>History-aware retriever</h3>
+    <p>A smart pre-step: before searching, it checks whether there's conversation history. If there's a vague follow-up ("what about its priority?"), it uses an AI call to rewrite it into a clear, standalone question ("What is TC_5170's priority?") <em>before</em> handing it to the retriever — because the retriever itself has no way to guess what "its" means.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="why-langchain">
+    <div class="section-label">The honest comparison</div>
+    <h2>Why LangChain instead of a "simple" hand-rolled RAG?</h2>
+    <p class="lead">A "simple" RAG (Retrieval-Augmented Generation) system is genuinely just five steps: turn your documents into number-lists → save them → turn the question into a number-list too → find the closest matches → stuff those matches into a prompt and ask the AI to answer. That's <em>exactly</em> what our very first, hand-rolled version already did. So what did switching to LangChain actually buy us? Here's the honest, evidence-backed answer — not marketing.</p>
+
+    <table>
+      <tr><th>What we needed</th><th>Without LangChain (what we had)</th><th>With LangChain</th></tr>
+      <tr><td>Swap the answering AI (Mistral → Gemini)</td><td>Would've meant rewriting the API-calling code in two files</td><td>One shared factory function, ~15 lines, reused everywhere — <strong>proven</strong> by actually doing it</td></tr>
+      <tr><td>Combine keyword + meaning search</td><td>A hand-written ranking function, easy to get subtly wrong</td><td><code>EnsembleRetriever</code> — a tested, pre-built version of the same math</td></tr>
+      <tr><td>Split long documents into chunks</td><td>Only split on blank lines — missed a 5,778-character chunk</td><td><code>RecursiveCharacterTextSplitter</code> — automatically recurses into oversized pieces</td></tr>
+      <tr><td>Remember conversation context</td><td>Would've meant designing a memory system from scratch</td><td><code>createHistoryAwareRetriever</code> — a standard, documented pattern for exactly this</td></tr>
+      <tr><td>Keep custom logic where nothing standard fits</td><td>Everything was custom, so nothing to compare against</td><td>Custom code (like our dominant-page fix) sits <em>next to</em> standard pieces without conflict</td></tr>
+    </table>
+
+    <div class="explain">
+      <span class="k">The honest caveat</span>
+      <p>LangChain didn't make everything automatically correct. We still had to discover — the hard way, by hitting real errors — that Mistral's embedding API has a stricter batch-size limit than the library's default, and that firing all requests at once triggers a real rate limit. LangChain gives you well-tested <em>building blocks</em>; it doesn't remove the need to actually test them against your real APIs and real data.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="architecture">
+    <div class="section-label">The whole thing, end to end</div>
+    <h2>Full architecture</h2>
+    <p>Everything below lives inside one app. The left path (orange) is the original 3-input generation engine. The right path (blue) is the new Knowledge Search input, entirely independent.</p>
+
+    <div class="diagram">
+      <div class="flow-row" style="align-items:flex-start">
+        <div class="flow-col">
+          <div class="box" data-type="frontend"><div class="t">Browser UI</div><div class="s">chat, buttons, panels</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="frontend"><div class="t">Express server.js</div><div class="s">one backend, both paths</div></div>
+        </div>
+      </div>
+      <div class="flow-row" style="margin-top:10px; gap: 40px;">
+        <div class="flow-col" style="flex:1">
+          <div class="box" data-type="langflow"><div class="t">Inputs 1–3: story / file / Jira</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="langflow"><div class="t">Langflow: Writer → Reviewer</div><div class="s">2 chained Gemini calls</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="model"><div class="t">Gemini</div><div class="s">via Langflow</div></div>
+        </div>
+        <div class="flow-col" style="flex:1">
+          <div class="box" data-type="langchain"><div class="t">Input 4: Knowledge Search</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="custom"><div class="t">Router: Test Plan or Test Cases</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="langchain"><div class="t">History-aware Retriever</div><div class="s">rewrites follow-ups if needed</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="flow-row" style="gap:8px">
+            <div class="box" data-type="langchain" style="min-width:100px"><div class="t">Vector search</div><div class="s">meaning match</div></div>
+            <div class="box" data-type="custom" style="min-width:100px"><div class="t">Keyword search</div><div class="s">Test Cases only</div></div>
+          </div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="datastore"><div class="t">MongoDB Atlas</div><div class="s">stores both the text &amp; the meaning-numbers</div></div>
+          <div class="arrow-v">↓</div>
+          <div class="box" data-type="model"><div class="t">Mistral or Gemini</div><div class="s">writes the final answer, using chat history</div></div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--c-frontend)"></span>Browser / backend shell</span>
+        <span><span class="dot" style="background:var(--c-langflow)"></span>Langflow (Inputs 1–3)</span>
+        <span><span class="dot" style="background:var(--c-langchain)"></span>LangChain (Input 4)</span>
+        <span><span class="dot" style="background:var(--c-custom)"></span>Our custom code</span>
+        <span><span class="dot" style="background:var(--c-datastore)"></span>Data storage</span>
+        <span><span class="dot" style="background:var(--c-model)"></span>AI model</span>
+      </div>
+    </div>
+
+    <h3>Ingestion — how Test Plan data gets in there in the first place</h3>
+    <p>This happens ahead of time, offline, not while you're chatting:</p>
+    <div class="diagram">
+      <div class="flow-row">
+        <div class="box" data-type="datastore" style="min-width:110px"><div class="t">Confluence</div><div class="s">111 pages</div></div>
+        <div class="arrow-h">→</div>
+        <div class="box" data-type="custom" style="min-width:110px"><div class="t">Storage-format converter</div><div class="s">custom code</div></div>
+        <div class="arrow-h">→</div>
+        <div class="box" data-type="langchain" style="min-width:110px"><div class="t">Text splitter</div><div class="s">→ 2,728 chunks</div></div>
+        <div class="arrow-h">→</div>
+        <div class="box" data-type="model" style="min-width:110px"><div class="t">Mistral embeddings</div><div class="s">text → numbers</div></div>
+        <div class="arrow-h">→</div>
+        <div class="box" data-type="datastore" style="min-width:110px"><div class="t">MongoDB Atlas</div><div class="s">stored, ready to search</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="sequence">
+    <div class="section-label">What actually happens</div>
+    <h2>Step by step: asking a question and a follow-up</h2>
+
+    <ol class="steps">
+      <li><div class="st-title">You click "Knowledge," pick a source, type a question</div><p>e.g. "What is the Test Plan for Tournament Ticket Discounting about?" A brand-new, private conversation ID is created for this thread.</p></li>
+      <li><div class="st-title">The browser sends the question to the server</div><p>Along with which source (Test Plan or Test Cases) and that conversation ID.</p></li>
+      <li><div class="st-title">No history yet → the question goes straight to search</div><p>Since this is the first question, there's nothing to rewrite — no extra AI call spent.</p></li>
+      <li><div class="st-title">The question is turned into meaning-numbers</div><p>Via Mistral's embedding model — the exact same model used when the documents were first stored, so the numbers are comparable.</p></li>
+      <li><div class="st-title">The database finds the closest-matching chunks</div><p>For Test Plan: pure meaning-based matching. For Test Cases: meaning-based <em>and</em> keyword matching, combined.</p></li>
+      <li><div class="st-title">A special check: did one document dominate the results?</div><p>If several of the top matches all come from the <em>same</em> source page, that page's <em>entire</em> content is fetched — not just the sampled pieces — so nothing relevant gets silently left out.</p></li>
+      <li><div class="st-title">The AI writes an answer, strictly from those documents</div><p>Told explicitly: answer only using what's here, and say so plainly if it's not enough — never guess.</p></li>
+      <li><div class="st-title">The answer + source links are saved into that conversation's memory</div><p>Ready to be used if a follow-up comes next.</p></li>
+      <li><div class="st-title">You type a follow-up directly in the main chat box</div><p>e.g. "what discount types does <strong>it</strong> support?" — no need to reopen the panel or pick the source again.</p></li>
+      <li><div class="st-title">The app recognizes this as a follow-up</div><p>Because the very last message in the chat was itself a Knowledge Search answer — so it reuses the same conversation ID and source automatically.</p></li>
+      <li><div class="st-title">This time, there IS history — so the question gets rewritten first</div><p>An AI call turns "what discount types does it support?" into something search can actually use, like "What discount types does Tournament Ticket Discounting support?" — using the memory from step 8.</p></li>
+      <li><div class="st-title">Search, dominant-page check, and answer-writing repeat — this time with memory</div><p>The final answer-writing step also sees the conversation history, so it correctly understands what "it" meant when phrasing its reply.</p></li>
+    </ol>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="providers">
+    <div class="section-label">Under the hood</div>
+    <h2>Mistral vs. Gemini — what's actually swappable</h2>
+    <p class="lead">One setting (<code>CHAT_MODEL_PROVIDER</code>) currently set to <strong>Gemini</strong>. But not <em>everything</em> is swappable, and the line between what is and isn't matters a lot.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <span class="tag" style="background:var(--critical)">Fixed — always Mistral</span>
+        <h4>Embeddings (both moments)</h4>
+        <p>Turning stored documents into meaning-numbers, <em>and</em> turning your live question into meaning-numbers. These two have to use the <strong>same</strong> model, or the numbers wouldn't be comparable at all — like measuring one thing in miles and the other in kilograms.</p>
+      </div>
+      <div class="card">
+        <span class="tag" style="background:var(--good)">Configurable — Mistral or Gemini</span>
+        <h4>Writing the final answer &amp; rewriting follow-ups</h4>
+        <p>Both of these happen <em>after</em> the real documents have already been found. They just read text and write text back — no meaning-numbers involved — so which AI brand does this job is a free choice.</p>
+      </div>
+    </div>
+
+    <h3>Why Gemini, for now</h3>
+    <p>Tested directly, side by side, on the same real question: comparable speed (~6.4–6.7 seconds), comparable answer quality. The deciding factor was practical — Gemini's larger context window gives more headroom for the "dominant page" case, where an entire long page's content might need to be handed to the AI at once, and it's already used elsewhere in this app (the Langflow side) for the same kind of work.</p>
+
+    <div class="explain">
+      <span class="k">A real lesson learned live</span>
+      <p>A specific pinned model name (<code>gemini-2.5-flash</code>) turned out to be deprecated mid-session — it errored with a live "no longer available to new users" message. The fix: use <code>gemini-flash-latest</code>, an <em>alias</em> that always points to whatever Google currently recommends, instead of a fixed version number that can go stale.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="future">
+    <div class="section-label">Where this can go</div>
+    <h2>What we could build next, on the same foundation</h2>
+
+    <div class="grid-2">
+      <div class="card">
+        <h4>Reranking</h4>
+        <p>A dedicated step that double-checks each search result's real relevance <em>before</em> it reaches the AI — we already saw evidence this would help (a "login authentication" search once returned test cases that only <em>mentioned</em> login as a side step, not cases actually about authentication).</p>
+      </div>
+      <div class="card">
+        <h4>RAG-driven test case generation</h4>
+        <p>Instead of only <em>answering questions</em> about existing test cases, use them as grounding to help <em>generate new ones</em> in the same house style — bridging Input 4 back toward what Inputs 1–3 do.</p>
+      </div>
+      <div class="card">
+        <h4>Persistent conversation memory</h4>
+        <p>Right now, follow-up memory lives only in the server's working memory and disappears on restart. It could be upgraded to a real, permanent store without changing how the rest of the system works.</p>
+      </div>
+      <div class="card">
+        <h4>A PRD knowledge source</h4>
+        <p>The dropdown already has a "PRD" option ready, disabled. Wiring it up follows the exact recipe in the next section.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="add-source">
+    <div class="section-label">A practical recipe</div>
+    <h2>How to add a new knowledge source (e.g. "Corporate Test Cases" or "PRD")</h2>
+    <p class="lead">Because everything follows the same standard LangChain shapes, adding a brand-new source is a repeatable recipe, not a redesign. Here's the exact playbook, based on how Test Plan and Test Cases were actually built.</p>
+
+    <ol class="steps">
+      <li><div class="st-title">Decide: is the data already stored somewhere, or does it need ingesting?</div><p>If it's a fresh source (like a new Confluence space), you'll need an ingestion step. If it's an existing, already-searchable database (like Test Cases was), you can skip straight to step 5.</p></li>
+      <li><div class="st-title">Write a fetcher for the raw data</div><p>Pull the content from wherever it lives (an API, a file export, a database) into plain text.</p></li>
+      <li><div class="st-title">Convert to plain text if needed</div><p>Strip out any source-specific formatting (like Confluence's or Jira's special markup) into clean, readable text — reuse an existing converter if the source format is similar to one already handled.</p></li>
+      <li><div class="st-title">Chunk it and embed it</div><p>Use LangChain's <code>RecursiveCharacterTextSplitter</code> to break long text into ~1,000-character pieces, then <code>MistralAIEmbeddings</code> + <code>MongoDBAtlasVectorSearch.fromDocuments()</code> to turn them into meaning-numbers and store them — this is a one-time (or occasional) offline script, not something that runs per-question.</p></li>
+      <li><div class="st-title">Create the Atlas Search index</div><p>One vector index per new collection, matching the same 1024-dimension shape Mistral produces. (Remember: a free-tier Atlas cluster caps the number of indexes — plan for this before building.)</p></li>
+      <li><div class="st-title">Write the retriever file</div><p>Copy the shape of <code>testplanRetriever.js</code> (vector-only) or <code>testcasesRetriever.js</code> (hybrid) depending on whether you also want keyword search. Wire in <code>getSessionHistory</code> / <code>wrapWithHistoryAwareness</code> for free follow-up support — no new memory code needed.</p></li>
+      <li><div class="st-title">Register it in <code>server.js</code></div><p>Add one line to the source lookup table: <code>{ corporateTestCases: queryCorporateTestCases }</code>.</p></li>
+      <li><div class="st-title">Enable it in the dropdown</div><p>Remove <code>disabled</code> from that option in <code>index.html</code> — this is exactly what's already waiting for PRD.</p></li>
+      <li><div class="st-title">Test with real questions before trusting it</div><p>Check retrieval quality, source-citation accuracy, and a follow-up question — the same verification approach used for every source in this guide.</p></li>
+    </ol>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="glossary">
+    <div class="section-label">Quick reference</div>
+    <h2>Glossary — every term, one line each</h2>
+    <dl class="glossary">
+      <dt>RAG (Retrieval-Augmented Generation)</dt><dd>Finding real documents first, then asking an AI to answer <em>using only those documents</em> — instead of relying on what the AI happened to learn during training.</dd>
+      <dt>Embedding</dt><dd>Text converted into a list of numbers that represents its meaning.</dd>
+      <dt>Vector / vector search</dt><dd>Another name for that list of numbers, and the act of finding the closest-meaning matches to a given one.</dd>
+      <dt>Chunk</dt><dd>A smaller piece of a longer document, sized so its meaning stays focused and it fits comfortably into an AI prompt.</dd>
+      <dt>Hybrid search</dt><dd>Combining keyword search and meaning-based search, since each catches things the other misses.</dd>
+      <dt>Reciprocal Rank Fusion (RRF)</dt><dd>The specific, standard math for merging two ranked result lists into one fair combined ranking.</dd>
+      <dt>Retriever</dt><dd>Anything that takes a question and returns the most relevant documents.</dd>
+      <dt>LLM / Chat model</dt><dd>The AI model that reads and writes natural language (Mistral, Gemini, etc.).</dd>
+      <dt>Prompt</dt><dd>The actual text sent to an AI model, including instructions and context.</dd>
+      <dt>LangChain</dt><dd>A toolkit of pre-built, standard pieces for building RAG and AI-powered applications, so you don't build every piece from scratch.</dd>
+      <dt>Langflow</dt><dd>A different tool — a visual, drag-and-drop canvas for building AI workflows. Powers Inputs 1–3, untouched by this session's work.</dd>
+      <dt>Session / conversation memory</dt><dd>Remembering earlier turns of a conversation so later questions can refer back to them.</dd>
+      <dt>MongoDB Atlas</dt><dd>The cloud database used here both as normal storage and as a vector-search engine.</dd>
+      <dt>Confluence</dt><dd>Atlassian's documentation tool — where the Test Plan source's real content lives.</dd>
+    </dl>
+  </section>
+
+</div>
+
+<footer>TestPilot — Complete Architecture Guide · generated for internal reference</footer>
+
+<script>
+  function toggleTheme() {
+    const root = document.documentElement;
+    const current = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+  }
+</script>
+</body>
+</html>

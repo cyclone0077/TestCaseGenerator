@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Test Case Generator</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -113,6 +114,24 @@
                 </div>
               </div>
             </div>
+            <!-- Knowledge search panel (4th input) - independent of Langflow -->
+            <div id="knowledge-panel" class="jira-panel" hidden>
+              <div class="jira-panel-header">
+                <span class="jira-panel-title">&#128218; Knowledge Search</span>
+                <button type="button" class="jira-close-btn" id="knowledge-close-btn">&#10005; Close</button>
+              </div>
+              <div class="jira-fetch-row">
+                <select id="knowledge-source-select" class="jira-id-input">
+                  <option value="testplan">Test Plan</option>
+                  <option value="testcases" disabled>Test Cases (coming soon)</option>
+                  <option value="prd" disabled>PRD (coming soon)</option>
+                </select>
+                <input type="text" id="knowledge-query-input" class="jira-id-input"
+                  placeholder="Ask about the QA Test Plan..." autocomplete="off" />
+                <button type="button" id="knowledge-search-btn" class="jira-fetch-btn">Search</button>
+              </div>
+              <p class="jira-hint">Answers are grounded only in your org's own data (Confluence Test Plans) &mdash; a separate RAG pipeline from the Langflow flow used by the other 3 modes.</p>
+            </div>
             <div class="file-chip-row" id="file-chip-row"></div>
             <div class="composer-pill">
               <textarea
@@ -132,6 +151,17 @@
                           aria-label="Connect Jira ticket" title="Jira Connector">
                     <span aria-hidden="true">&#128279;</span>
                     <span>Jira</span>
+                  </button>
+                  <span class="composer-tool-divider" aria-hidden="true"></span>
+                  <button type="button" class="composer-tool-btn" id="knowledge-btn"
+                          aria-label="Search organizational knowledge" title="Knowledge Search">
+                    <span aria-hidden="true">&#128218;</span>
+                    <span>Knowledge</span>
+                  </button>
+                  <button type="button" class="composer-tool-btn" id="ingestion-btn"
+                          aria-label="Ingest new knowledge data" title="Ingestion">
+                    <span aria-hidden="true">&#128229;</span>
+                    <span>Ingestion</span>
                   </button>
                   <div class="model-selector">
                     <button type="button" class="composer-tool-btn model-btn" id="model-btn"
@@ -163,6 +193,107 @@
 
     <!-- Toast container for non-blocking error notifications -->
     <div id="toast-container" class="toast-container" aria-live="assertive"></div>
+  </div>
+
+  <!-- Ingestion Wizard: a modal overlay on top of the main chat (not an
+       inline panel, not a full-screen takeover) - run fetch -> chunk -> embed
+       for a Confluence source from the browser, instead of the CLI scripts
+       directly. -->
+  <div id="ingestion-view" class="ingestion-view">
+    <div class="ingestion-card">
+    <aside class="ingestion-sidebar">
+      <div class="ingestion-sidebar-brand">
+        <span class="ingestion-sidebar-icon" aria-hidden="true">&#9992;&#65039;</span>
+        <div>
+          <div class="ingestion-sidebar-title">TestPilot</div>
+          <div class="ingestion-sidebar-subtitle">Ingestion Wizard</div>
+        </div>
+      </div>
+      <ol class="ingestion-steps">
+        <li class="ingestion-step active" id="ingestion-step-source">
+          <span class="ingestion-step-num" aria-hidden="true">1</span>
+          <div>
+            <div class="ingestion-step-title">Source Selection</div>
+            <div class="ingestion-step-desc">Connect to external platforms</div>
+          </div>
+        </li>
+        <li class="ingestion-step" id="ingestion-step-configuration">
+          <span class="ingestion-step-num" aria-hidden="true">2</span>
+          <div>
+            <div class="ingestion-step-title">Configuration</div>
+            <div class="ingestion-step-desc">Choose the destination</div>
+          </div>
+        </li>
+        <li class="ingestion-step" id="ingestion-step-ingestion">
+          <span class="ingestion-step-num" aria-hidden="true">3</span>
+          <div>
+            <div class="ingestion-step-title">Data Ingestion</div>
+            <div class="ingestion-step-desc">Fetch, chunk &amp; embed</div>
+          </div>
+        </li>
+        <li class="ingestion-step" id="ingestion-step-review">
+          <span class="ingestion-step-num" aria-hidden="true">4</span>
+          <div>
+            <div class="ingestion-step-title">Review &amp; Commit</div>
+            <div class="ingestion-step-desc">Confirm what was stored</div>
+          </div>
+        </li>
+      </ol>
+      <button type="button" id="ingestion-cancel-btn" class="ingestion-cancel-btn">&#10005; Cancel Wizard</button>
+    </aside>
+
+    <main class="ingestion-main">
+      <div class="ingestion-main-header">
+        <span class="ingestion-main-title">&#128229; Ingestion</span>
+        <button type="button" class="jira-close-btn" id="ingestion-close-btn">&#10005; Close</button>
+      </div>
+
+      <div class="ingestion-main-body">
+        <div class="jira-field-group">
+          <div class="ingestion-step-header">
+            <label class="jira-field-label">STEP 1 &middot; FETCH &amp; CHUNK</label>
+          </div>
+          <div class="jira-fetch-row" style="margin-bottom: 8px;">
+            <select id="ingestion-mode-select" class="jira-id-input">
+              <option value="descendants">Page + descendants (root folder or space homepage)</option>
+              <option value="single">Single page only</option>
+            </select>
+          </div>
+          <input type="text" id="ingestion-page-id-input" class="jira-field-input"
+            placeholder="Confluence Page ID" autocomplete="off" style="margin-bottom: 8px;" />
+          <input type="text" id="ingestion-source-name-input" class="jira-field-input"
+            placeholder="Source Name (e.g. PRD) — tags each chunk and names the output file" autocomplete="off" />
+          <div class="jira-generate-row">
+            <button type="button" id="ingestion-fetch-btn" class="jira-fetch-btn">Fetch &amp; Chunk</button>
+          </div>
+          <p class="jira-hint" id="ingestion-fetch-result" hidden></p>
+        </div>
+
+        <div class="jira-field-group">
+          <div class="ingestion-step-header">
+            <label class="jira-field-label">STEP 2 &middot; AVAILABLE FILES</label>
+            <button type="button" id="ingestion-refresh-files-btn" class="jira-text-btn">Refresh</button>
+          </div>
+          <div id="ingestion-file-list" class="ingestion-file-list">
+            <p class="jira-hint">No files yet — run Step 1 first.</p>
+          </div>
+        </div>
+
+        <div class="jira-field-group">
+          <label class="jira-field-label">STEP 3 &middot; EMBED &amp; STORE</label>
+          <input type="text" id="ingestion-collection-input" class="jira-field-input"
+            placeholder="Destination collection" autocomplete="off" value="test_plans" style="margin-bottom: 8px;" />
+          <input type="text" id="ingestion-index-input" class="jira-field-input"
+            placeholder="Vector index name" autocomplete="off" value="vector_index_test_plans" />
+          <p class="jira-hint">Storing into a brand-new collection/index name always succeeds, but vector search against a new index won't work until that index is created in Atlas (a manual step, outside this app).</p>
+          <div class="jira-generate-row">
+            <button type="button" id="ingestion-embed-btn" class="jira-generate-btn" disabled>Embed &amp; Store &#8594;</button>
+          </div>
+          <p class="jira-hint" id="ingestion-embed-result" hidden></p>
+        </div>
+      </div>
+    </main>
+    </div>
   </div>
 
   <!-- SheetJS for Excel export (allowed per spec — ban only on Langflow chat CDN) -->
