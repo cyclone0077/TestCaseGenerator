@@ -474,6 +474,12 @@ body {
   transition: border-color 0.15s ease, background 0.25s ease;
 }
 
+.jira-field-input[readonly] {
+  background: color-mix(in srgb, var(--color-border) 30%, var(--color-surface));
+  color: var(--color-text-muted, #9ca3af);
+  cursor: default;
+}
+
 .jira-field-input:focus,
 .jira-field-textarea:focus {
   border-color: var(--color-primary);
@@ -517,6 +523,60 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
+}
+
+.ingestion-card-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.ingestion-option-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.ingestion-option-card:hover {
+  border-color: var(--color-primary);
+}
+
+.ingestion-option-card.selected {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+}
+
+.ingestion-option-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+
+.ingestion-option-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.ingestion-option-desc {
+  font-size: 0.75rem;
+  color: var(--color-text-muted, #9ca3af);
+}
+
+.ingestion-card-row-sm .ingestion-option-card-sm {
+  padding: 8px 10px;
+  align-items: center;
+  text-align: center;
 }
 
 .ingestion-file-list {
@@ -1923,6 +1983,34 @@ textarea:focus-visible {
   background: rgba(29, 92, 58, 0.12);
   border-color: rgba(29, 92, 58, 0.28);
   color: #4ade80;
+}
+
+/* Compliance clause excerpt - same shape as .tc-expected-box, neutral tint
+   (a legal excerpt isn't a "success" indicator) and pre-line whitespace so
+   the scraper's "\n"-per-point text renders as separate paragraphs without
+   needing manually-built <br>/<p> DOM nodes. */
+.cc-excerpt {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  color: var(--color-text);
+  white-space: pre-line;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Compliance clause cell - unlike .tc-id-cell (short, non-wrapping IDs like
+   "TC-001"), a clauseId is followed by a full title that needs to wrap
+   normally, not force the whole column wide on one line. */
+.cc-clause-cell {
+  white-space: normal;
+}
+.cc-clause-cell strong {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.8rem;
 }
 
 .tc-pri-cell {

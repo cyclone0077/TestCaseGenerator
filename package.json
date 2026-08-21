@@ -5,7 +5,8 @@
   "description": "Test Case Generator UI + Jira fetch proxy",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "create-compliance-indexes": "node src/scripts/createComplianceIndexes.js"
   },
   "engines": {
     "node": ">=18"

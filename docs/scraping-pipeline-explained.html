@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>How the Compliance Scraping &amp; Ingestion Pipeline Works</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #e6e9ef;
+    --text-muted: #9aa3b2;
+    --accent: #5b9bff;
+    --accent-2: #7ee3a8;
+    --accent-3: #ffb454;
+    --accent-4: #ff8a8a;
+    --code-bg: #0c0e12;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 100px; }
+  h1 { font-size: 1.9rem; margin-bottom: 6px; }
+  h2 {
+    font-size: 1.35rem; margin-top: 56px; margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  h2 .step-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #06101f; font-weight: 800; font-size: 0.9rem;
+    margin-right: 10px; vertical-align: middle;
+  }
+  h3 { font-size: 1.02rem; margin-top: 28px; color: var(--accent); }
+  p.subtitle { color: var(--text-muted); font-size: 1.05rem; margin-top: 0; }
+  a { color: var(--accent); }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--code-bg); padding: 2px 6px; border-radius: 5px; font-size: 0.85em;
+    border: 1px solid var(--border);
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; overflow-x: auto; font-size: 0.83rem;
+  }
+  pre code { background: none; border: none; padding: 0; }
+  .file-tag {
+    display: inline-block; font-size: 0.72rem; color: var(--text-muted);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 2px 8px; margin-bottom: 6px; font-family: ui-monospace, monospace;
+  }
+  .callout {
+    background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: var(--radius); padding: 14px 18px; margin: 16px 0;
+  }
+  .callout.warn { border-left-color: var(--accent-3); }
+  .callout.win { border-left-color: var(--accent-2); }
+  .callout b { color: var(--text); }
+
+  /* ---- pipeline diagram ---- */
+  .pipeline {
+    display: flex; flex-direction: column; gap: 0; margin: 24px 0 8px;
+  }
+  .stage {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+  }
+  .stage .icon {
+    width: 38px; height: 38px; border-radius: 9px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
+  }
+  .stage .body { flex: 1; }
+  .stage .title { font-weight: 700; font-size: 0.95rem; }
+  .stage .desc { color: var(--text-muted); font-size: 0.82rem; margin-top: 2px; }
+  .stage.web .icon { background: rgba(91,155,255,0.15); color: var(--accent); }
+  .stage.parse .icon { background: rgba(126,227,168,0.15); color: var(--accent-2); }
+  .stage.extract .icon { background: rgba(255,180,84,0.15); color: var(--accent-3); }
+  .stage.store .icon { background: rgba(255,138,138,0.15); color: var(--accent-4); }
+  .stage.search .icon { background: rgba(91,155,255,0.15); color: var(--accent); }
+  .arrow-down {
+    align-self: center; color: var(--text-muted); font-size: 1.1rem; margin: 2px 0 2px 24px;
+  }
+  .lane-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-muted); font-weight: 700; margin: 28px 0 10px;
+  }
+
+  table.explain { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.88rem; }
+  table.explain th, table.explain td {
+    text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top;
+  }
+  table.explain th { color: var(--text-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.explain code { white-space: nowrap; }
+
+  .toc {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin: 20px 0 8px;
+  }
+  .toc a { display: block; padding: 3px 0; font-size: 0.9rem; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .glossary dt { font-weight: 700; color: var(--text); margin-top: 14px; }
+  .glossary dd { margin-left: 0; color: var(--text-muted); }
+
+  footer { margin-top: 60px; color: var(--text-muted); font-size: 0.8rem; border-top: 1px solid var(--border); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>How the Compliance Scraping &amp; Ingestion Pipeline Works</h1>
+  <p class="subtitle">A walk-through of how GDPR / EU AI Act / DPDP legal text gets from a public website into MongoDB, and how a chat query later finds the right clause — with the real code from this project.</p>
+
+  <div class="toc">
+    <a href="#big-picture">1. The big picture (two pipelines)</a>
+    <a href="#step1">2. Fetching the page (<code>fetch()</code>)</a>
+    <a href="#step2">3. Parsing HTML with Cheerio</a>
+    <a href="#step3">4. Extracting clean, structured data</a>
+    <a href="#step4">5. Writing the intermediate JSON file</a>
+    <a href="#step5">6. Turning text into vectors (embeddings)</a>
+    <a href="#step6">7. Storing in MongoDB (the upsert)</a>
+    <a href="#step7">8. Query time: vector search + reranking</a>
+    <a href="#glossary">9. Glossary</a>
+  </div>
+
+  <h2 id="big-picture"><span class="step-num">1</span>The big picture</h2>
+  <p>There are really <b>two separate pipelines</b> that run at completely different times:</p>
+
+  <div class="lane-label">Ingestion pipeline — runs once, offline, whenever you click "Scrape Articles" → "Embed &amp; Store"</div>
+  <div class="pipeline">
+    <div class="stage web">
+      <div class="icon">🌐</div>
+      <div class="body"><div class="title">1. Public website</div><div class="desc">gdpr-info.eu / dpdpa.com / artificialintelligenceact.eu — one page per article/section</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>fetch(url)</code></div>
+    <div class="stage web">
+      <div class="icon">📄</div>
+      <div class="body"><div class="title">2. Raw HTML text</div><div class="desc">Just one big string — everything the browser would parse, unparsed</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>cheerio.load(html)</code></div>
+    <div class="stage parse">
+      <div class="icon">🔍</div>
+      <div class="body"><div class="title">3. Queryable DOM (Cheerio)</div><div class="desc">Now you can ask for elements by CSS selector, like jQuery — but no browser, no JavaScript execution</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>$('.entry-content').children('ol,p,ul')...</code></div>
+    <div class="stage extract">
+      <div class="icon">✂️</div>
+      <div class="body"><div class="title">4. Extracted fields</div><div class="desc"><code>{ standard, clauseId, title, text, url }</code> — one object per article/section</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>fs.writeFileSync(...)</code></div>
+    <div class="stage extract">
+      <div class="icon">🗂️</div>
+      <div class="body"><div class="title">5. Local JSON file</div><div class="desc"><code>src/data/compliance/gdpr-clauses.json</code> — a checkpoint before spending API money</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>MistralAIEmbeddings.embedDocuments(...)</code></div>
+    <div class="stage store">
+      <div class="icon">🧮</div>
+      <div class="body"><div class="title">6. Embedding vectors</div><div class="desc">Each clause's text becomes a list of 1024 numbers capturing its <i>meaning</i></div></div>
+    </div>
+    <div class="arrow-down">↓ <code>collection.bulkWrite(upsert by clauseId)</code></div>
+    <div class="stage store">
+      <div class="icon">🍃</div>
+      <div class="body"><div class="title">7. MongoDB Atlas</div><div class="desc">Stored as a document with the vector attached; Atlas builds a Vector Search index over it</div></div>
+    </div>
+  </div>
+
+  <div class="lane-label">Retrieval pipeline — runs every time someone searches in the chat UI</div>
+  <div class="pipeline">
+    <div class="stage search">
+      <div class="icon">💬</div>
+      <div class="body"><div class="title">1. User types a story</div><div class="desc">e.g. "User can request full deletion of their account and data"</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>embeddings.embedQuery(story)</code></div>
+    <div class="stage store">
+      <div class="icon">🧮</div>
+      <div class="body"><div class="title">2. The story becomes a vector too</div><div class="desc">Same embedding model as ingestion — otherwise the numbers wouldn't be comparable</div></div>
+    </div>
+    <div class="arrow-down">↓ <code>$vectorSearch</code> aggregation (cosine similarity)</div>
+    <div class="stage extract">
+      <div class="icon">📋</div>
+      <div class="body"><div class="title">3. Top-K candidate clauses</div><div class="desc">The clauses whose vectors are numerically closest to the story's vector</div></div>
+    </div>
+    <div class="arrow-down">↓ LLM reranking (Mistral/Gemini judges real relevance)</div>
+    <div class="stage parse">
+      <div class="icon">⭐</div>
+      <div class="body"><div class="title">4. Ranked matches with scores</div><div class="desc">Reordered by how relevant the clause actually is, 0–1, nothing silently dropped</div></div>
+    </div>
+    <div class="arrow-down">↓ render as a table</div>
+    <div class="stage web">
+      <div class="icon">🖥️</div>
+      <div class="body"><div class="title">5. Chat UI — Compliance Matches table</div><div class="desc">Clause / Relevance / Excerpt / Link</div></div>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Why two separate pipelines?</b> Ingestion is slow and costs API calls (scraping 99–113 pages, embedding each one) — you only want to do it when the source text actually changes. Retrieval has to be fast (a few seconds), so by query time everything is already pre-computed and sitting in MongoDB, ready to compare against.
+  </div>
+
+  <h2 id="step1"><span class="step-num">2</span>Fetching the page — <code>fetch()</code></h2>
+  <p>
+    <code>fetch()</code> is a built-in JavaScript function (no library needed) that makes an HTTP request to a URL and gives you back the response. It's the exact same thing your browser does when it loads a page — except here, nothing gets <i>displayed</i>. You just get the raw text back.
+  </p>
+  <span class="file-tag">src/scripts/gdprScraper.js</span>
+  <pre><code>async function fetchArticle(n) {
+  const url = `${BASE_URL}/art-${n}-gdpr/`;
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Fetch failed for ${url} (HTTP ${res.status})`);
+
+  const html = await res.text();   // &lt;-- this is the entire page's HTML, as one big string
+  ...
+}</code></pre>
+  <table class="explain">
+    <tr><th>Piece</th><th>What it means</th></tr>
+    <tr><td><code>await fetch(url)</code></td><td>Sends the HTTP request and waits for the server to respond. <code>await</code> is needed because network calls take time — the code pauses here without blocking anything else.</td></tr>
+    <tr><td><code>User-Agent</code> header</td><td>Identifies the request as coming from "a browser" — some sites reject requests with no User-Agent, treating them as bots.</td></tr>
+    <tr><td><code>res.status === 404</code></td><td>Some article numbers might not exist (or might 404) — handled as "skip it," not "crash the whole scrape."</td></tr>
+    <tr><td><code>await res.text()</code></td><td>Reads the response body as plain text. At this point it's still <i>just a string</i> — nothing has been parsed or understood yet.</td></tr>
+  </table>
+  <div class="callout warn">
+    <b>Being a considerate scraper.</b> Between each article, the scraper waits 1 second (<code>await sleep(REQUEST_DELAY_MS)</code>) instead of firing 99+ requests at once. Real people run these websites — hammering them with concurrent requests is inconsiderate and can look like an attack.
+  </div>
+
+  <h3>The DPDP scraper has an extra step: discovery</h3>
+  <p>
+    GDPR and EU AI Act articles live at predictable URLs (<code>/art-17-gdpr/</code>, <code>/article/17/</code>) — you can just loop <code>n = 1..99</code>. DPDP's site nests URLs under a chapter number that isn't guessable from the section number alone (e.g. Section 18 lives at <code>/chapter-5/section18.html</code>). So <code>dpdpScraper.js</code> first fetches the site's own homepage and <i>discovers</i> every real section→URL mapping from its navigation links, before fetching each one:
+  </p>
+  <span class="file-tag">src/scripts/dpdpScraper.js</span>
+  <pre><code>async function discoverSectionUrls() {
+  const res = await fetch(INDEX_URL, ...);
+  const html = await res.text();
+  const pattern = /https:\/\/(?:www\.)?dpdpa\.com\/dpdpa2023\/chapter-\d+\/section(\d+)\.html/g;
+  const bySectionNumber = new Map();
+  let match;
+  while ((match = pattern.exec(html))) {
+    bySectionNumber.set(Number(match[1]), match[0]);
+  }
+  return [...bySectionNumber.entries()].sort((a, b) => a[0] - b[0]).map(([, url]) => url);
+}</code></pre>
+
+  <h2 id="step2"><span class="step-num">3</span>Parsing HTML with Cheerio</h2>
+  <p>
+    Once you have the raw HTML string, you need a way to <i>ask questions about it</i> — "give me the element with class <code>dsgvo-title</code>", "give me every <code>&lt;li&gt;</code> inside this list". A plain string can't answer that; you need something that understands HTML's tree structure.
+  </p>
+  <p>
+    <b>Cheerio</b> is a lightweight library that parses an HTML string into a tree of elements and gives you a <b>jQuery-like API</b> to query and manipulate it — the same <code>$('.some-class')</code> selector syntax jQuery made popular, but running on the server in plain Node.js, with <b>no real browser involved</b>. That's the key distinction from something like Puppeteer/Playwright:
+  </p>
+  <table class="explain">
+    <tr><th></th><th>Cheerio</th><th>A real headless browser (Puppeteer, etc.)</th></tr>
+    <tr><td>What it is</td><td>An HTML parser + jQuery-style query API</td><td>An actual browser engine running without a visible window</td></tr>
+    <tr><td>Runs JavaScript on the page?</td><td>No</td><td>Yes</td></tr>
+    <tr><td>Speed</td><td>Very fast, low memory</td><td>Much slower, heavier</td></tr>
+    <tr><td>When you need it</td><td>The content is already in the HTML (server-rendered)</td><td>The content only appears after JS runs (client-rendered SPA)</td></tr>
+  </table>
+  <p>All three legal-text sites here render their content directly in the HTML (view-source shows the real text), so Cheerio is the right, lightweight tool — no need to pay the cost of a full browser.</p>
+
+  <span class="file-tag">src/scripts/gdprScraper.js</span>
+  <pre><code>const cheerio = require("cheerio");
+...
+const html = await res.text();
+const $ = cheerio.load(html);   // &lt;-- parses the string into a queryable tree
+
+const h1 = $("h1.entry-title").first();
+const clauseId = h1.find(".dsgvo-number").text().trim();   // "Art. 17 GDPR "
+const title = h1.find(".dsgvo-title").text().trim();       // "Right to erasure ('right to be forgotten')"</code></pre>
+  <p><code>cheerio.load(html)</code> returns a function conventionally named <code>$</code> (same convention as jQuery). Calling <code>$("selector")</code> finds matching elements anywhere in the parsed document, exactly like <code>document.querySelectorAll()</code> would in a browser.</p>
+
+  <h3>The Cheerio methods actually used in this project</h3>
+  <table class="explain">
+    <tr><th>Method</th><th>What it does</th></tr>
+    <tr><td><code>$(".class")</code></td><td>Find all elements matching a CSS selector, anywhere in the document.</td></tr>
+    <tr><td><code>.first()</code></td><td>Narrow a multi-element match down to just the first one.</td></tr>
+    <tr><td><code>.find("li")</code></td><td>Search only <i>inside</i> the current element(s) for descendants matching the selector (includes nested ones, at any depth).</td></tr>
+    <tr><td><code>.children("ol, p, ul")</code></td><td>Like <code>.find()</code>, but only <i>direct</i> children — doesn't reach into grandchildren. Used to grab exactly the top-level paragraphs/lists of an article body.</td></tr>
+    <tr><td><code>.text()</code></td><td>Get the plain-text content of an element, with all HTML tags stripped — but it <i>recurses</i> into every descendant's text too.</td></tr>
+    <tr><td><code>.clone()</code></td><td>Make an independent copy of an element, so you can modify the copy (e.g. delete parts of it) without touching the original parsed document.</td></tr>
+    <tr><td><code>.remove()</code></td><td>Delete matched elements entirely from the tree they're in.</td></tr>
+    <tr><td><code>.each((i, el) => ...)</code></td><td>Loop over every matched element, like <code>Array.forEach</code>.</td></tr>
+  </table>
+
+  <h2 id="step3"><span class="step-num">4</span>Extracting clean, structured data</h2>
+  <p>
+    This is the part that took the most iteration in this project — real websites are messy, and <code>.text()</code>'s "recurse into everything" behavior causes real bugs if you're not careful. Two concrete ones this scraper had to solve:
+  </p>
+
+  <h3>Bug 1: nested lists get duplicated</h3>
+  <p>GDPR Article 20 has a point with two lettered sub-points nested inside it:</p>
+  <pre><code>&lt;li&gt;...personal data..., where:
+  &lt;ol&gt;
+    &lt;li&gt;the processing is based on consent...&lt;/li&gt;
+    &lt;li&gt;the processing is carried out by automated means.&lt;/li&gt;
+  &lt;/ol&gt;
+&lt;/li&gt;</code></pre>
+  <p>
+    Calling <code>.text()</code> on the <b>outer</b> <code>&lt;li&gt;</code> returns its own text <i>plus</i> the nested list's text, all concatenated — and then looping over <i>every</i> <code>&lt;li&gt;</code> (via <code>.find("li")</code>) visits the nested ones <i>again</i>, so their text appears a second time. The fix: clone each <code>&lt;li&gt;</code>, remove any nested <code>&lt;ol&gt;/&lt;ul&gt;</code> from the <i>clone</i> first, <i>then</i> read its text — so you get each item's own words exactly once, in the right order.
+  </p>
+  <span class="file-tag">src/scripts/gdprScraper.js</span>
+  <pre><code>$el.find("li").each((_j, li) => {
+  const $li = $(li).clone();          // work on a copy, not the real parsed tree
+  $li.find("ol, ul, sup").remove();   // strip nested lists (see bug 2 for "sup")
+  const text = cleanText($li.text()); // now this li's OWN text only
+  if (text) parts.push(text);
+});</code></pre>
+
+  <h3>Bug 2: citation markers glue onto the next word</h3>
+  <p>Some GDPR paragraphs use a superscript number to pinpoint-cite an individual sentence, with zero whitespace in the source markup:</p>
+  <pre><code>&lt;li&gt;&lt;sup&gt;1&lt;/sup&gt;The exercise of the right... &lt;sup&gt;2&lt;/sup&gt;That right shall not apply...&lt;/li&gt;</code></pre>
+  <p>
+    Read as plain text, that becomes the confusing <code>"1The exercise... 2That right..."</code> — readable to a citation-aware human, but visually like stray typos to anyone else. The fix: remove <code>&lt;sup&gt;</code> elements from the clone before extracting text, same idea as the nested-list fix above.
+  </p>
+
+  <div class="callout win">
+    <b>Same root cause, same fix shape.</b> Both bugs come from <code>.text()</code>'s "grab everything underneath, whether you wanted it or not" behavior. The general pattern — <code>clone()</code> → <code>remove()</code> the parts you don't want → <i>then</i> <code>.text()</code> — is reusable any time HTML mixes "real content" with "annotations you don't want."
+  </div>
+
+  <h2 id="step4"><span class="step-num">5</span>Writing the intermediate JSON file</h2>
+  <p>
+    After all articles/sections are fetched and cleaned, the scraper writes one JSON array to disk, e.g. <code>src/data/compliance/gdpr-clauses.json</code>:
+  </p>
+  <pre><code>[
+  {
+    "standard": "GDPR",
+    "clauseId": "Art. 17 GDPR",
+    "title": "Right to erasure ('right to be forgotten')",
+    "text": "The data subject shall have the right to obtain...",
+    "url": "https://gdpr-info.eu/art-17-gdpr/"
+  },
+  ...
+]</code></pre>
+  <p>This file is a deliberate checkpoint between two very different kinds of work:</p>
+  <ul>
+    <li><b>Scraping</b> is free and safe to re-run as many times as you want — it just re-fetches public pages.</li>
+    <li><b>Embedding</b> (next step) costs real API calls to Mistral, and writes to a shared database.</li>
+  </ul>
+  <p>Splitting them means you can inspect the scraped JSON, confirm it looks right, and only <i>then</i> spend the API budget embedding it — instead of finding out something scraped wrong only after it's already in the database.</p>
+
+  <h2 id="step5"><span class="step-num">6</span>Turning text into vectors (embeddings)</h2>
+  <p>
+    An <b>embedding</b> is a list of numbers (here, 1024 of them) that represents the <i>meaning</i> of a piece of text, produced by a machine-learning model (Mistral's embedding model, in this project). Two pieces of text with <i>similar meaning</i> get numerically <i>close</i> vectors — even if they don't share any of the same words. That's what makes it possible to search by "this story is about deleting personal data" and find "Art. 17 — Right to erasure," without either text literally containing the word "delete."
+  </p>
+  <span class="file-tag">src/scripts/complianceIngest.js</span>
+  <pre><code>const embeddings = new MistralAIEmbeddings({ apiKey: MISTRAL_API_KEY, model: MISTRAL_EMBEDDING_MODEL });
+
+async function embedTexts(texts) {
+  const vectors = await embeddings.embedDocuments(texts);   // one 1024-number array per input text
+  ...
+  return vectors;
+}</code></pre>
+  <p>Each clause is embedded as <code>title + "\n" + text</code> (not just the body text alone) — so a query that closely echoes a clause's own title isn't invisible to the embedding just because the title only lives in metadata.</p>
+
+  <h2 id="step6"><span class="step-num">7</span>Storing in MongoDB (the upsert)</h2>
+  <p>Each clause becomes one MongoDB document, embedded in batches of <code>COMPLIANCE_INGEST_BATCH_SIZE</code> (default 20) so a single Mistral API call doesn't have to carry the whole collection at once:</p>
+  <span class="file-tag">src/scripts/complianceIngest.js</span>
+  <pre><code>const ops = batch.map((clause, idx) => ({
+  updateOne: {
+    filter: { clauseId: clause.clauseId },     // find by clauseId...
+    update: {
+      $set: {
+        standard: clause.standard,
+        clauseId: clause.clauseId,
+        title: clause.title,
+        text: clause.text,
+        url: clause.url,
+        embedding: vectors[idx],               // ...the 1024 numbers from Mistral
+        metadata: { standard: clause.standard, clauseId: clause.clauseId },
+        updatedAt: now,
+      },
+      $setOnInsert: { createdAt: now },
+    },
+    upsert: true,                              // ...update if found, INSERT if not
+  },
+}));
+await collection.bulkWrite(ops);</code></pre>
+  <p>
+    <code>upsert: true</code> means "update this document if one with a matching <code>clauseId</code> already exists, otherwise create it." That's what makes re-running ingestion safe: scrape and embed the same article twice, and the second run just <i>overwrites</i> the same document instead of creating a duplicate.
+  </p>
+  <p>
+    The <code>metadata.standard</code> / <code>metadata.clauseId</code> fields exist specifically because the MongoDB Atlas <b>Vector Search index</b> (a separate thing you configure in Atlas, not created by this code) is defined to filter on those exact nested paths — the index definition and the document shape have to agree with each other.
+  </p>
+
+  <h2 id="step7"><span class="step-num">8</span>Query time: vector search + reranking</h2>
+  <p>When someone searches with a story, three things happen in sequence:</p>
+  <ol>
+    <li><b>Embed the story</b> — the exact same embedding model turns the user's story into its own 1024-number vector.</li>
+    <li>
+      <b>Vector search</b> — MongoDB's <code>$vectorSearch</code> aggregation stage compares the story's vector against every stored clause's vector using <b>cosine similarity</b> (a measure of how closely two vectors "point in the same direction"), and returns the closest matches.
+    </li>
+    <li>
+      <b>LLM reranking</b> — vector similarity alone is a rough signal. The candidates get sent to the chat model (Mistral or Gemini, whichever <code>CHAT_MODEL_PROVIDER</code> selects) with a prompt asking it to actually judge relevance and assign a 0–1 score to each — reordering the list without silently dropping anything.
+    </li>
+  </ol>
+  <span class="file-tag">src/scripts/complianceClauseRetriever.js</span>
+  <pre><code>const candidates = await collection.aggregate([
+  {
+    $vectorSearch: {
+      index: indexName,
+      path: "embedding",
+      queryVector,           // the story's own vector
+      numCandidates,
+      limit,
+      filter: { "metadata.standard": standard },
+    },
+  },
+  { $project: { _id: 0, clauseId: 1, title: 1, text: 1, url: 1, score: { $meta: "vectorSearchScore" } } },
+]).toArray();</code></pre>
+  <p>The result is what the chat UI renders as the "Compliance Matches" table — clause, relevance score, an excerpt of the actual legal text, and a link back to the source page.</p>
+
+  <h2 id="glossary"><span class="step-num">9</span>Glossary</h2>
+  <dl class="glossary">
+    <dt>HTTP fetch</dt><dd>Asking a server for a resource (here, a web page) and getting its content back as a response.</dd>
+    <dt>HTML parsing</dt><dd>Converting a raw HTML string into a structured tree of elements you can navigate and query, instead of just text.</dd>
+    <dt>DOM (Document Object Model)</dt><dd>The tree structure a parsed HTML document forms — elements nested inside other elements.</dd>
+    <dt>CSS selector</dt><dd>A pattern like <code>.entry-content</code> or <code>h1.entry-title</code> used to pick out specific elements from a DOM tree.</dd>
+    <dt>Cheerio</dt><dd>A Node.js library that parses HTML and exposes a jQuery-like selector API, without running a real browser or executing JavaScript.</dd>
+    <dt>Scraping</dt><dd>Automatically fetching and extracting data from web pages, as opposed to a human reading them.</dd>
+    <dt>Embedding</dt><dd>A numeric vector representing the meaning of a piece of text, produced by a machine-learning model, positioned so that similar meanings end up numerically close together.</dd>
+    <dt>Vector search</dt><dd>Finding the stored vectors that are numerically closest to a query vector — the mechanism behind "search by meaning" instead of "search by matching keywords."</dd>
+    <dt>Cosine similarity</dt><dd>A way of measuring how similar two vectors are by the angle between them, regardless of their length — the standard comparison used in vector search.</dd>
+    <dt>Reranking</dt><dd>A second pass over a shortlist of candidates (usually done by an LLM) that judges their real relevance more carefully than the fast first-pass similarity search could.</dd>
+    <dt>Upsert</dt><dd>"Update if it exists, insert if it doesn't" — a single database operation that makes re-running the same write idempotent (safe to repeat).</dd>
+    <dt>Idempotent</dt><dd>Running the same operation multiple times has the same effect as running it once — no duplicates, no extra side effects.</dd>
+  </dl>
+
+  <footer>
+    Generated as a learning reference for the CustomChatUI project's Compliance (GDPR / EU AI Act / DPDP) ingestion pipeline. Reflects the actual code in <code>src/scripts/gdprScraper.js</code>, <code>euAiActScraper.js</code>, <code>dpdpScraper.js</code>, <code>complianceIngest.js</code>, and <code>complianceClauseRetriever.js</code> at the time it was written — re-check those files if this drifts out of date.
+  </footer>
+
+</div>
+</body>
+</html>

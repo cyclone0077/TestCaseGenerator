@@ -49,6 +49,10 @@
     ingestionView: document.getElementById("ingestion-view"),
     ingestionCloseBtn: document.getElementById("ingestion-close-btn"),
     ingestionCancelBtn: document.getElementById("ingestion-cancel-btn"),
+    ingestionSourceCards: document.getElementById("ingestion-source-cards"),
+    ingestionConfluenceFields: document.getElementById("ingestion-confluence-fields"),
+    ingestionComplianceFields: document.getElementById("ingestion-compliance-fields"),
+    ingestionStandardCards: document.getElementById("ingestion-standard-cards"),
     ingestionModeSelect: document.getElementById("ingestion-mode-select"),
     ingestionPageIdInput: document.getElementById("ingestion-page-id-input"),
     ingestionSourceNameInput: document.getElementById("ingestion-source-name-input"),
@@ -56,6 +60,7 @@
     ingestionFetchResult: document.getElementById("ingestion-fetch-result"),
     ingestionRefreshFilesBtn: document.getElementById("ingestion-refresh-files-btn"),
     ingestionFileList: document.getElementById("ingestion-file-list"),
+    ingestionDestinationHint: document.getElementById("ingestion-destination-hint"),
     ingestionCollectionInput: document.getElementById("ingestion-collection-input"),
     ingestionIndexInput: document.getElementById("ingestion-index-input"),
     ingestionEmbedBtn: document.getElementById("ingestion-embed-btn"),
@@ -923,11 +928,135 @@
     return wrap;
   }
 
+  // GDPR/EU AI Act/DPDP matches come from our own API as real structured
+  // data (clauseId/title/score/url/text), not raw markdown from an LLM -
+  // formatKnowledgeReply() below wraps them in a fenced ```compliance-matches
+  // JSON block instead of a markdown table, since a clause's full multi-
+  // paragraph text can't safely round-trip through a markdown table cell.
+  // Detected here and rendered as a real table, reusing the exact same
+  // tc-phase/tc-table/tc-badge visual language as the test-case view.
+  function extractComplianceMatches(md) {
+    const m = /^```compliance-matches\n([\s\S]*?)\n```$/.exec(md.trim());
+    if (!m) return null;
+    try {
+      const matches = JSON.parse(m[1]);
+      return Array.isArray(matches) ? matches : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function renderComplianceMatches(matches) {
+    const wrap = document.createElement("div");
+    wrap.className = "tc-phases-wrap";
+
+    const phaseEl = document.createElement("div");
+    phaseEl.className = "tc-phase";
+
+    const hdr = document.createElement("div");
+    hdr.className = "tc-phase-header";
+    hdr.innerHTML =
+      '<span class="tc-phase-title">Compliance Matches</span>' +
+      '<span class="tc-count-badge">' + matches.length + " match" + (matches.length !== 1 ? "es" : "") + "</span>" +
+      '<button type="button" class="tc-copy-phase-btn">⊞ Copy matches</button>';
+    phaseEl.appendChild(hdr);
+
+    hdr.querySelector(".tc-copy-phase-btn").addEventListener("click", function () {
+      const text = matches.map(function (m) {
+        return m.clauseId + " — " + m.title + " (relevance: " + (typeof m.score === "number" ? m.score.toFixed(2) : "?") + ")\n" +
+          m.text + "\n" + (m.url || "");
+      }).join("\n\n");
+      navigator.clipboard.writeText(text);
+      showToast("Matches copied.");
+    });
+
+    if (!matches.length) {
+      const empty = document.createElement("p");
+      empty.className = "jira-hint";
+      empty.textContent = "No relevant clauses were found for that story.";
+      phaseEl.appendChild(empty);
+      wrap.appendChild(phaseEl);
+      return wrap;
+    }
+
+    const tWrap = document.createElement("div");
+    tWrap.className = "tc-table-wrap";
+    const table = document.createElement("table");
+    table.className = "tc-table";
+
+    // Explicit column widths - without this, .tc-id-cell's white-space:nowrap
+    // (meant for short test-case IDs like "TC-001") forces a whole clause
+    // title onto one line, ballooning that column and squeezing Excerpt
+    // down to almost nothing.
+    table.innerHTML = "<colgroup>" +
+      '<col style="width: 20%">' +
+      '<col style="width: 9%">' +
+      '<col style="width: 61%">' +
+      '<col style="width: 10%">' +
+      "</colgroup>";
+
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>Clause</th><th>Relevance</th><th>Excerpt</th><th></th></tr>";
+    table.appendChild(thead);
+
+    const tbody = document.createElement("tbody");
+    matches.forEach(function (m) {
+      const tr = document.createElement("tr");
+
+      const tdClause = document.createElement("td");
+      tdClause.className = "tc-td cc-clause-cell";
+      tdClause.innerHTML = "<strong>" + escapeHtml(m.clauseId || "") + "</strong><br>" + escapeHtml(m.title || "");
+      tr.appendChild(tdClause);
+
+      const tdScore = document.createElement("td");
+      tdScore.className = "tc-td tc-pri-cell";
+      const score = typeof m.score === "number" ? m.score : 0;
+      // Reuses the same red/amber/gray tiering as test-case priority badges -
+      // high/medium/low relevance instead of P0/P1/P2, same visual language.
+      const bc = score >= 0.7 ? "tc-badge-p0" : score >= 0.4 ? "tc-badge-p1" : "tc-badge-p2";
+      tdScore.innerHTML = '<span class="tc-badge ' + bc + '">' + score.toFixed(2) + "</span>";
+      tr.appendChild(tdScore);
+
+      const tdText = document.createElement("td");
+      tdText.className = "tc-td";
+      const excerpt = document.createElement("div");
+      excerpt.className = "cc-excerpt";
+      excerpt.textContent = (m.text || "").split("\n").filter(Boolean).join("\n\n");
+      tdText.appendChild(excerpt);
+      tr.appendChild(tdText);
+
+      const tdLink = document.createElement("td");
+      tdLink.className = "tc-td";
+      if (m.url) {
+        const a = document.createElement("a");
+        a.href = m.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "View →";
+        tdLink.appendChild(a);
+      }
+      tr.appendChild(tdLink);
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tWrap.appendChild(table);
+    phaseEl.appendChild(tWrap);
+    wrap.appendChild(phaseEl);
+    return wrap;
+  }
+
   // Renders assistant markdown, using the rich per-step test-case table UI for
   // any TC phase tables detected, and the plain markdown renderer for everything
   // else, preserving the original order of sections.
   function renderAssistantContent(markdownText) {
     const container = document.createElement("div");
+    const complianceMatches = extractComplianceMatches(markdownText);
+    if (complianceMatches) {
+      container.appendChild(renderComplianceMatches(complianceMatches));
+      return container;
+    }
     const sections = extractTestCasePhases(markdownText);
     if (!sections) {
       container.innerHTML = renderMarkdown(markdownText);
@@ -1497,6 +1626,18 @@
   // Renders the answer + source citations as one assistant markdown message,
   // reusing the existing markdown renderer (so links render as clickable).
   function formatKnowledgeReply(result) {
+    // GDPR/EU AI Act/DPDP return ranked clause matches, not a synthesized
+    // chat answer - a "map this story to obligations" lookup, not a Q&A
+    // reply. Wrapped as a fenced ```compliance-matches JSON block (real
+    // structured data, not an LLM's markdown) so renderAssistantContent can
+    // render it as a proper table via renderComplianceMatches(), the same
+    // "beautiful" tc-table visual language the test-case view already uses -
+    // a clause's full multi-paragraph text can't safely round-trip through
+    // a markdown table cell, so this carries the exact data through instead.
+    if (result.matches) {
+      return "```compliance-matches\n" + JSON.stringify(result.matches) + "\n```";
+    }
+
     let text = result.answer;
     if (result.sources && result.sources.length) {
       // Confluence-backed sources (Test Plan) carry a url -> link. DB-backed
@@ -1593,11 +1734,92 @@
     });
   }
 
+  // Compliance scrapers always write to these exact filenames (unlike
+  // Confluence's user-named "<slug>-chunks.json") - lets a file selected in
+  // Step 2 be routed to the right destination collection purely from its
+  // name, even after a page reload where no card was clicked this session.
+  // Directory (confluence/ vs compliance/) is what actually decides cluster
+  // routing server-side - this is only for Step 3's collection-name default.
+  function ingestSourceForFile(fileName) {
+    if (fileName === "gdpr-clauses.json") return "gdpr";
+    if (fileName === "eu-ai-act-clauses.json") return "euai";
+    if (fileName === "dpdp-clauses.json") return "dpdp";
+    return "confluence";
+  }
+
+  // Card-row selection helpers - the "cards" are just buttons with a
+  // data-value, toggled via a "selected" class; one active per row.
+  function getSelectedCardValue(containerEl) {
+    const selected = containerEl.querySelector(".ingestion-option-card.selected");
+    return selected ? selected.dataset.value : null;
+  }
+
+  function selectCard(containerEl, value) {
+    Array.prototype.forEach.call(containerEl.querySelectorAll(".ingestion-option-card"), function (card) {
+      card.classList.toggle("selected", card.dataset.value === value);
+    });
+  }
+
+  // The real destination (database + per-standard collection/index) Step 3
+  // should show - fetched once from the server (which reads it straight
+  // from .env) rather than hardcoded here, so it can't drift out of sync.
+  let ingestionComplianceConfig = null;
+  async function ensureComplianceConfig() {
+    if (ingestionComplianceConfig) return ingestionComplianceConfig;
+    try {
+      const res = await fetch("/api/admin/ingest/compliance-config");
+      if (res.ok) ingestionComplianceConfig = await res.json();
+    } catch (e) {
+      // Left null - Step 3 just falls back to the standard's own key
+      // ("gdpr"/"euai"/"dpdp") as the collection name, no index shown.
+    }
+    return ingestionComplianceConfig;
+  }
+
+  // Step 3's fields reflect whichever destination is actually active -
+  // called both when a standard card is clicked (before Step 1 has even
+  // run) and when a file is picked in Step 2, so it's never left showing
+  // stale Test Plan defaults for a Compliance selection.
+  async function applyDestinationDefaults(source) {
+    const isCompliance = source !== "confluence";
+    elements.ingestionIndexInput.readOnly = isCompliance;
+
+    if (!isCompliance) {
+      elements.ingestionCollectionInput.value = "test_plans";
+      elements.ingestionIndexInput.value = "vector_index_test_plans";
+      elements.ingestionDestinationHint.textContent = "";
+      return;
+    }
+
+    const config = await ensureComplianceConfig();
+    const standardConfig = config && config.standards && config.standards[source];
+    elements.ingestionCollectionInput.value = standardConfig ? standardConfig.collectionName : source;
+    elements.ingestionIndexInput.value = standardConfig ? standardConfig.indexName : "";
+    elements.ingestionDestinationHint.textContent = config && config.dbName
+      ? "Compliance cluster → database: " + config.dbName
+      : "Compliance cluster (separate from Test Plan's)";
+  }
+
+  async function updateIngestionSourceTypeUI() {
+    const isCompliance = getSelectedCardValue(elements.ingestionSourceCards) === "compliance";
+    elements.ingestionConfluenceFields.hidden = isCompliance;
+    elements.ingestionComplianceFields.hidden = !isCompliance;
+    elements.ingestionFetchBtn.textContent = isCompliance ? "Scrape Articles" : "Fetch & Chunk";
+
+    // Switching source clears any file selected under the OTHER source's
+    // list - Step 2/3 always reflect the currently active source, not a
+    // stale pick from before the switch.
+    state.ingestionSelectedFile = null;
+    elements.ingestionEmbedBtn.disabled = true;
+    await applyDestinationDefaults(isCompliance ? getSelectedCardValue(elements.ingestionStandardCards) : "confluence");
+    loadIngestionFiles();
+  }
+
   function showIngestionPanel() {
     document.body.classList.add("ingestion-mode");
     setIngestionStep(0);
+    updateIngestionSourceTypeUI();
     elements.ingestionPageIdInput.focus();
-    loadIngestionFiles();
   }
 
   function hideIngestionPanel() {
@@ -1623,14 +1845,20 @@
       elements.ingestionFileList.querySelectorAll(".ingestion-file-row"),
       function (row) { row.classList.toggle("selected", row.dataset.fileName === fileName); }
     );
+
+    // Step 3's destination fields reflect whichever file is now selected -
+    // a specific file's own source, which may differ from whatever standard
+    // card currently happens to be selected (e.g. re-picking an older file).
+    applyDestinationDefaults(ingestSourceForFile(fileName));
   }
 
   async function loadIngestionFiles() {
+    const sourceType = getSelectedCardValue(elements.ingestionSourceCards);
     elements.ingestionFileList.innerHTML = '<p class="jira-hint">Loading…</p>';
     try {
       let res;
       try {
-        res = await fetch("/api/admin/ingest/files");
+        res = await fetch("/api/admin/ingest/files?source=" + sourceType);
       } catch (e) {
         throw ingestionNetworkError();
       }
@@ -1674,7 +1902,45 @@
     }
   }
 
+  async function runComplianceScrapeRequest() {
+    const standard = getSelectedCardValue(elements.ingestionStandardCards);
+
+    elements.ingestionFetchBtn.disabled = true;
+    elements.ingestionFetchResult.hidden = false;
+    elements.ingestionFetchResult.textContent = "⏳ Scraping every article - this takes roughly 1-2 minutes...";
+    try {
+      let res;
+      try {
+        res = await fetch("/api/admin/ingest/scrape-compliance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ standard: standard }),
+        });
+      } catch (e) {
+        throw ingestionNetworkError();
+      }
+      if (!res.ok) throw await httpError("Scrape failed", res);
+
+      const result = await res.json();
+      elements.ingestionFetchResult.textContent =
+        "✅ Scraped " + result.clauseCount + " clause(s) → " + result.fileName;
+      setIngestionStep(1);
+
+      await loadIngestionFiles();
+      selectIngestionFile(result.fileName);
+    } catch (err) {
+      elements.ingestionFetchResult.textContent = "❌ " + err.message + (err.detail ? " — " + err.detail : "");
+    } finally {
+      elements.ingestionFetchBtn.disabled = false;
+    }
+  }
+
   async function runIngestionFetch() {
+    if (getSelectedCardValue(elements.ingestionSourceCards) === "compliance") {
+      await runComplianceScrapeRequest();
+      return;
+    }
+
     const pageId = elements.ingestionPageIdInput.value.trim();
     const sourceName = elements.ingestionSourceNameInput.value.trim();
     if (!pageId) { elements.ingestionPageIdInput.focus(); return; }
@@ -1715,9 +1981,13 @@
   async function runIngestionEmbed() {
     const fileName = state.ingestionSelectedFile;
     const collectionName = elements.ingestionCollectionInput.value.trim();
-    const indexName = elements.ingestionIndexInput.value.trim();
     if (!fileName) { showToast("Select a file from Step 2 first.", true); return; }
-    if (!collectionName || !indexName) { return; }
+    if (!collectionName) { return; }
+
+    const source = ingestSourceForFile(fileName);
+    const isCompliance = source !== "confluence";
+    const indexName = elements.ingestionIndexInput.value.trim();
+    if (!isCompliance && !indexName) { return; }
 
     elements.ingestionEmbedBtn.disabled = true;
     elements.ingestionEmbedResult.hidden = true;
@@ -1725,10 +1995,14 @@
     try {
       let res;
       try {
-        res = await fetch("/api/admin/ingest/embed", {
+        res = await fetch(isCompliance ? "/api/admin/ingest/embed-compliance" : "/api/admin/ingest/embed", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fileName: fileName, collectionName: collectionName, indexName: indexName }),
+          body: JSON.stringify(
+            isCompliance
+              ? { fileName: fileName, collectionName: collectionName }
+              : { fileName: fileName, collectionName: collectionName, indexName: indexName }
+          ),
         });
       } catch (e) {
         throw ingestionNetworkError();
@@ -1737,9 +2011,10 @@
 
       const result = await res.json();
       elements.ingestionEmbedResult.hidden = false;
-      elements.ingestionEmbedResult.textContent =
-        "✅ Embedded " + result.chunksEmbedded + " chunk(s) into \"" + collectionName +
-        "\" in " + (result.tookMs / 1000).toFixed(1) + "s";
+      elements.ingestionEmbedResult.textContent = isCompliance
+        ? "✅ Upserted into \"" + collectionName + "\" - inserted " + result.inserted + ", updated " + result.updated
+        : "✅ Embedded " + result.chunksEmbedded + " chunk(s) into \"" + collectionName +
+          "\" in " + (result.tookMs / 1000).toFixed(1) + "s";
       setIngestionStep(3);
     } catch (err) {
       elements.ingestionEmbedResult.hidden = false;
@@ -2873,6 +3148,20 @@
     // other modal.
     elements.ingestionView.addEventListener("click", function (e) {
       if (e.target === elements.ingestionView) hideIngestionPanel();
+    });
+    elements.ingestionSourceCards.addEventListener("click", function (e) {
+      const card = e.target.closest(".ingestion-option-card");
+      if (!card) return;
+      selectCard(elements.ingestionSourceCards, card.dataset.value);
+      updateIngestionSourceTypeUI();
+    });
+    elements.ingestionStandardCards.addEventListener("click", function (e) {
+      const card = e.target.closest(".ingestion-option-card");
+      if (!card) return;
+      selectCard(elements.ingestionStandardCards, card.dataset.value);
+      // Step 3 reflects the chosen standard immediately, even before Step 1
+      // has been run - no more showing stale Test Plan defaults.
+      applyDestinationDefaults(card.dataset.value);
     });
     elements.ingestionFetchBtn.addEventListener("click", runIngestionFetch);
     elements.ingestionRefreshFilesBtn.addEventListener("click", loadIngestionFiles);

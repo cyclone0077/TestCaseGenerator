@@ -1,8 +1,9 @@
 /* ==========================================================================
-   knowledgeSessionHistory.js — shared conversational-memory building blocks
-   for the Knowledge Search sources (Test Plan, Test Cases). Both retrievers
-   use this so history management and query reformulation live in one place
-   instead of being duplicated per source.
+   knowledgeSessionHistory.js — conversational-memory building blocks for
+   Knowledge Search sources that hold a real back-and-forth conversation
+   (currently just Test Plan). GDPR/EU AI Act don't use this - they're
+   stateless one-shot "map this story to clauses" lookups, not a
+   conversation, so there's no history to reformulate against.
    ========================================================================== */
 
 const { InMemoryChatMessageHistory } = require("@langchain/core/chat_history");

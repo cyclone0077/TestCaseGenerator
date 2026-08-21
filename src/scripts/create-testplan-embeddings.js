@@ -47,7 +47,7 @@ const TESTPLAN_VECTOR_INDEX_NAME = process.env.TESTPLAN_VECTOR_INDEX_NAME || "ve
 const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY || "";
 const MISTRAL_EMBEDDING_MODEL = process.env.MISTRAL_EMBEDDING_MODEL || "mistral-embed";
 
-const INPUT_FILE = "src/data/testplan-chunks.json";
+const INPUT_FILE = "src/data/confluence/testplan-chunks.json";
 
 function validateConfig() {
   const missing = ["MONGODB_URI", "DB_NAME", "MISTRAL_API_KEY"].filter((key) => !process.env[key]);

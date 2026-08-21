@@ -9,7 +9,10 @@ require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const { queryTestPlan } = require("./src/scripts/testplanRetriever");
-const { listChunkFiles, runFetch, runEmbed } = require("./src/scripts/ingestionAdmin");
+const { queryGdpr } = require("./src/scripts/gdprRetriever");
+const { queryEuAiAct } = require("./src/scripts/euAiActRetriever");
+const { queryDpdp } = require("./src/scripts/dpdpRetriever");
+const { listChunkFiles, runFetch, runEmbed, runComplianceScrape, runComplianceEmbed, getComplianceConfig } = require("./src/scripts/ingestionAdmin");
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -120,8 +123,16 @@ app.get("/api/jira/:ticketId", async (req, res) => {
 // of the Langflow flow used by the other 3 input modes. "testcases" and
 // "prd" are not wired up - the Test Cases collection was removed (shown as
 // "coming soon" in the dropdown, matching PRD's not-yet-built state).
+// testplan connects to MONGODB_URI; gdpr/euaiact/dpdp all connect to the
+// Compliance cluster (COMPLIANCE_MONGODB_URI, a separate Atlas account -
+// Test Plan's cluster is already at its vector-index limit) but each holds
+// its own collection/index there. All four stay live at once, this map
+// just routes each request to the one its "source" field names.
 const KNOWLEDGE_SOURCES = {
   testplan: queryTestPlan,
+  gdpr: queryGdpr,
+  euaiact: queryEuAiAct,
+  dpdp: queryDpdp,
 };
 
 app.post("/api/knowledge/query", async function (req, res) {
@@ -152,9 +163,18 @@ app.post("/api/knowledge/query", async function (req, res) {
 // reusable functions the CLI scripts call themselves (see ingestionAdmin.js)
 // - a source and its destination collection/index are form input here
 // instead of hardcoded env vars.
+app.get("/api/admin/ingest/compliance-config", function (req, res) {
+  try {
+    res.json(getComplianceConfig());
+  } catch (err) {
+    console.error("Loading compliance config failed:", err.message);
+    res.status(500).json({ error: "Loading compliance config failed: " + err.message });
+  }
+});
+
 app.get("/api/admin/ingest/files", function (req, res) {
   try {
-    res.json({ files: listChunkFiles() });
+    res.json({ files: listChunkFiles(req.query.source) });
   } catch (err) {
     console.error("Listing chunk files failed:", err.message);
     res.status(500).json({ error: "Listing chunk files failed: " + err.message });
@@ -180,6 +200,31 @@ app.post("/api/admin/ingest/embed", async function (req, res) {
   } catch (err) {
     console.error("Ingestion embed failed:", err.message);
     res.status(400).json({ error: "Ingestion embed failed: " + err.message });
+  }
+});
+
+// Compliance variant of fetch/embed above - scrapes GDPR/EU AI Act directly
+// (no page ID) and upserts into the separate Compliance cluster by
+// clauseId, instead of Confluence + Test Plan's cluster.
+app.post("/api/admin/ingest/scrape-compliance", async function (req, res) {
+  const { standard } = req.body || {};
+  try {
+    const result = await runComplianceScrape({ standard });
+    res.json(result);
+  } catch (err) {
+    console.error("Compliance scrape failed:", err.message);
+    res.status(400).json({ error: "Compliance scrape failed: " + err.message });
+  }
+});
+
+app.post("/api/admin/ingest/embed-compliance", async function (req, res) {
+  const { fileName, collectionName } = req.body || {};
+  try {
+    const result = await runComplianceEmbed({ fileName, collectionName });
+    res.json(result);
+  } catch (err) {
+    console.error("Compliance embed failed:", err.message);
+    res.status(400).json({ error: "Compliance embed failed: " + err.message });
   }
 });
 

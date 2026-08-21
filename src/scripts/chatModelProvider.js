@@ -1,14 +1,15 @@
 /* ==========================================================================
    chatModelProvider.js — shared chat-model factory for the Knowledge Search
-   sources (Test Plan, Test Cases). CHAT_MODEL_PROVIDER selects which
-   provider handles answer generation and follow-up reformulation.
+   sources (Test Plan, GDPR, EU AI Act). CHAT_MODEL_PROVIDER selects which
+   provider handles answer generation, follow-up reformulation, and (for
+   GDPR/EU AI Act) clause reranking.
 
    Embeddings are NOT part of this switch and stay hardcoded to Mistral
-   everywhere else (MistralAIEmbeddings, in both retriever files) - the
+   everywhere else (MistralAIEmbeddings, in every retriever file) - the
    stored corpus was embedded with Mistral's model, and a Mistral-embedded
    query has to stay Mistral-embedded too for vector search to mean anything.
-   Only the two steps that read/write text AFTER retrieval already
-   succeeded - answer synthesis and query reformulation - are provider-
+   Only the steps that read/write text AFTER retrieval already succeeded -
+   answer synthesis, query reformulation, clause reranking - are provider-
    agnostic enough to switch.
    ========================================================================== */
 

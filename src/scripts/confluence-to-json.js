@@ -23,7 +23,7 @@ const CONFLUENCE_API_TOKEN = process.env.CONFLUENCE_API_TOKEN || "";
 const TESTPLAN_ROOT_PAGE_ID = process.env.TESTPLAN_ROOT_PAGE_ID || "";
 
 const PAGE_LIMIT = 150;
-const OUTPUT_FILE = "src/data/testplan-chunks.json";
+const OUTPUT_FILE = "src/data/confluence/testplan-chunks.json";
 
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;

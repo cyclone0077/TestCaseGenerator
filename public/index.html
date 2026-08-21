@@ -123,14 +123,17 @@
               <div class="jira-fetch-row">
                 <select id="knowledge-source-select" class="jira-id-input">
                   <option value="testplan">Test Plan</option>
+                  <option value="gdpr">GDPR</option>
+                  <option value="euaiact">EU AI Act</option>
+                  <option value="dpdp" disabled>DPDP (index pending)</option>
                   <option value="testcases" disabled>Test Cases (coming soon)</option>
                   <option value="prd" disabled>PRD (coming soon)</option>
                 </select>
                 <input type="text" id="knowledge-query-input" class="jira-id-input"
-                  placeholder="Ask about the QA Test Plan..." autocomplete="off" />
+                  placeholder="Ask a Test Plan question, or paste a user story for GDPR/EU AI Act..." autocomplete="off" />
                 <button type="button" id="knowledge-search-btn" class="jira-fetch-btn">Search</button>
               </div>
-              <p class="jira-hint">Answers are grounded only in your org's own data (Confluence Test Plans) &mdash; a separate RAG pipeline from the Langflow flow used by the other 3 modes.</p>
+              <p class="jira-hint">Test Plan answers a question from Confluence docs; GDPR/EU AI Act map a user story/requirement to the most relevant clauses &mdash; a separate RAG pipeline from the Langflow flow used by the other 3 modes.</p>
             </div>
             <div class="file-chip-row" id="file-chip-row"></div>
             <div class="composer-pill">
@@ -253,16 +256,50 @@
           <div class="ingestion-step-header">
             <label class="jira-field-label">STEP 1 &middot; FETCH &amp; CHUNK</label>
           </div>
-          <div class="jira-fetch-row" style="margin-bottom: 8px;">
-            <select id="ingestion-mode-select" class="jira-id-input">
-              <option value="descendants">Page + descendants (root folder or space homepage)</option>
-              <option value="single">Single page only</option>
-            </select>
+          <div class="ingestion-card-row" id="ingestion-source-cards">
+            <button type="button" class="ingestion-option-card selected" data-value="confluence">
+              <span class="ingestion-option-icon" aria-hidden="true">&#128196;</span>
+              <span class="ingestion-option-title">Confluence</span>
+              <span class="ingestion-option-desc">Test Plan / PRD / etc.</span>
+            </button>
+            <button type="button" class="ingestion-option-card" data-value="compliance">
+              <span class="ingestion-option-icon" aria-hidden="true">&#128737;&#65039;</span>
+              <span class="ingestion-option-title">Compliance</span>
+              <span class="ingestion-option-desc">GDPR / EU AI Act / DPDP</span>
+            </button>
           </div>
-          <input type="text" id="ingestion-page-id-input" class="jira-field-input"
-            placeholder="Confluence Page ID" autocomplete="off" style="margin-bottom: 8px;" />
-          <input type="text" id="ingestion-source-name-input" class="jira-field-input"
-            placeholder="Source Name (e.g. PRD) — tags each chunk and names the output file" autocomplete="off" />
+
+          <div id="ingestion-confluence-fields">
+            <div class="jira-fetch-row" style="margin-bottom: 8px;">
+              <select id="ingestion-mode-select" class="jira-id-input">
+                <option value="descendants">Page + descendants (root folder or space homepage)</option>
+                <option value="single">Single page only</option>
+              </select>
+            </div>
+            <input type="text" id="ingestion-page-id-input" class="jira-field-input"
+              placeholder="Confluence Page ID" autocomplete="off" style="margin-bottom: 8px;" />
+            <input type="text" id="ingestion-source-name-input" class="jira-field-input"
+              placeholder="Source Name (e.g. PRD) — tags each chunk and names the output file" autocomplete="off" />
+          </div>
+
+          <div id="ingestion-compliance-fields" hidden>
+            <div class="ingestion-card-row ingestion-card-row-sm" id="ingestion-standard-cards">
+              <button type="button" class="ingestion-option-card ingestion-option-card-sm selected" data-value="gdpr">
+                <span class="ingestion-option-title">GDPR</span>
+                <span class="ingestion-option-desc">Art. 1-99</span>
+              </button>
+              <button type="button" class="ingestion-option-card ingestion-option-card-sm" data-value="euai">
+                <span class="ingestion-option-title">EU AI Act</span>
+                <span class="ingestion-option-desc">Art. 1-113</span>
+              </button>
+              <button type="button" class="ingestion-option-card ingestion-option-card-sm" data-value="dpdp">
+                <span class="ingestion-option-title">DPDP</span>
+                <span class="ingestion-option-desc">Sec. 1-44</span>
+              </button>
+            </div>
+            <p class="jira-hint">Scrapes every article/section directly by number — no page ID needed (Confluence Page ID only applies to the Confluence source above). One embedding per whole clause. Takes roughly 1-2 minutes (sequential requests, polite delay between each).</p>
+          </div>
+
           <div class="jira-generate-row">
             <button type="button" id="ingestion-fetch-btn" class="jira-fetch-btn">Fetch &amp; Chunk</button>
           </div>
@@ -281,11 +318,14 @@
 
         <div class="jira-field-group">
           <label class="jira-field-label">STEP 3 &middot; EMBED &amp; STORE</label>
+          <p class="jira-hint" id="ingestion-destination-hint" style="margin-top: 0; margin-bottom: 6px;"></p>
           <input type="text" id="ingestion-collection-input" class="jira-field-input"
             placeholder="Destination collection" autocomplete="off" value="test_plans" style="margin-bottom: 8px;" />
-          <input type="text" id="ingestion-index-input" class="jira-field-input"
-            placeholder="Vector index name" autocomplete="off" value="vector_index_test_plans" />
-          <p class="jira-hint">Storing into a brand-new collection/index name always succeeds, but vector search against a new index won't work until that index is created in Atlas (a manual step, outside this app).</p>
+          <div id="ingestion-index-field-wrap">
+            <input type="text" id="ingestion-index-input" class="jira-field-input"
+              placeholder="Vector index name" autocomplete="off" value="vector_index_test_plans" />
+          </div>
+          <p class="jira-hint">Storing into a brand-new collection/index name always succeeds, but vector search against a new index won't work until that index is created in Atlas (a manual step, outside this app). For GDPR/EU AI Act/DPDP the index name shown is read-only (informational) - it's not needed to write documents, only chosen at query time, so it always reflects the real configured index.</p>
           <div class="jira-generate-row">
             <button type="button" id="ingestion-embed-btn" class="jira-generate-btn" disabled>Embed &amp; Store &#8594;</button>
           </div>

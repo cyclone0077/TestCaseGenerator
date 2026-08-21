@@ -1,0 +1,202 @@
+{
+  "info": {
+    "name": "Compliance Coverage Agent (CustomChatUI)",
+    "description": "Ingestion (scrape + embed) and retrieval endpoints for the GDPR / EU AI Act / DPDP Compliance agent merged into CustomChatUI. Set the `baseUrl` collection variable to wherever the app server is running (defaults to http://localhost:8000).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Ingestion",
+      "item": [
+        {
+          "name": "Get Compliance Config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/compliance-config",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "compliance-config"]
+            },
+            "description": "Returns the real destination (database + per-standard collection/index names) read live from .env - dbName, and {gdpr, euai, dpdp} -> {collectionName, indexName}."
+          }
+        },
+        {
+          "name": "List Compliance Files",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/files?source=compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "files"],
+              "query": [{ "key": "source", "value": "compliance" }]
+            },
+            "description": "Lists scraped clause JSON files sitting in src/data/compliance/ - the same list the in-app Ingestion Wizard's Step 2 shows."
+          }
+        },
+        {
+          "name": "Scrape - GDPR",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"standard\": \"gdpr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/scrape-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "scrape-compliance"]
+            },
+            "description": "Fetches every GDPR article (gdpr-info.eu, Art. 1-99) directly by number and writes src/data/compliance/gdpr-clauses.json. Takes roughly 1-2 minutes; safe to re-run."
+          }
+        },
+        {
+          "name": "Scrape - EU AI Act",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"standard\": \"euai\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/scrape-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "scrape-compliance"]
+            },
+            "description": "Fetches every EU AI Act article (artificialintelligenceact.eu, Art. 1-113) and writes src/data/compliance/eu-ai-act-clauses.json."
+          }
+        },
+        {
+          "name": "Scrape - DPDP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"standard\": \"dpdp\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/scrape-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "scrape-compliance"]
+            },
+            "description": "Discovers every DPDP section's real URL from dpdpa.com's own nav (Sec. 1-44, chapters 1-9) and writes src/data/compliance/dpdp-clauses.json."
+          }
+        },
+        {
+          "name": "Embed - GDPR",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"gdpr-clauses.json\",\n  \"collectionName\": \"gdpr\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/embed-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "embed-compliance"]
+            },
+            "description": "Embeds (Mistral) each scraped GDPR clause and upserts it into the Compliance cluster's `gdpr` collection, matched by clauseId. Response: { inserted, updated }."
+          }
+        },
+        {
+          "name": "Embed - EU AI Act",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"eu-ai-act-clauses.json\",\n  \"collectionName\": \"euai\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/embed-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "embed-compliance"]
+            },
+            "description": "Embeds + upserts the scraped EU AI Act clauses into the `euai` collection."
+          }
+        },
+        {
+          "name": "Embed - DPDP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fileName\": \"dpdp-clauses.json\",\n  \"collectionName\": \"dpdp\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/ingest/embed-compliance",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "ingest", "embed-compliance"]
+            },
+            "description": "Embeds + upserts the scraped DPDP clauses into the `dpdp` collection."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Retrieval",
+      "item": [
+        {
+          "name": "Query - GDPR",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"gdpr\",\n  \"query\": \"User can request full deletion of their account and data\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "knowledge", "query"]
+            },
+            "description": "Vector search + LLM reranking over the gdpr collection. Response: { matches: [{ clauseId, title, url, text, score }] }, ranked by relevance (0-1), nothing dropped."
+          }
+        },
+        {
+          "name": "Query - EU AI Act",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"euaiact\",\n  \"query\": \"We want to deploy a facial recognition system for law enforcement in public spaces\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "knowledge", "query"]
+            },
+            "description": "Vector search + LLM reranking over the euai collection."
+          }
+        },
+        {
+          "name": "Query - DPDP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"source\": \"dpdp\",\n  \"query\": \"We collect children's personal data for a mobile game\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "knowledge", "query"]
+            },
+            "description": "Vector search + LLM reranking over the dpdp collection. Requires dpdp_index to exist in Atlas (see README's Compliance setup section)."
+          }
+        }
+      ]
+    }
+  ]
+}
